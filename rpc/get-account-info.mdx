@@ -1,0 +1,173 @@
+---
+title: "getAccountInfo RPC Method"
+description: "Returns all data stored in the on-chain account at a given public key, including lamports, owner, executable flag, rent epoch, and raw account data."
+---
+
+The `getAccountInfo` method retrieves the full state of a single on-chain account. You provide the account's base-58 public key and an optional configuration object. The response includes the account's lamport balance, the program that owns it, its raw data bytes (in the encoding you choose), whether it is an executable program account, and the epoch at which rent was last credited.
+
+## Parameters
+
+<ParamField path="params[0]" type="string" required>
+  The public key of the account to query, as a base-58 encoded string.
+</ParamField>
+
+<ParamField path="params[1]" type="object">
+  Optional configuration object.
+
+  <Expandable title="config fields">
+    <ParamField path="encoding" type="string" default="base64">
+      Encoding for the returned account data. Accepted values:
+
+      - `base58` — slow; limited to accounts with fewer than 129 bytes of data.
+      - `base64` — standard base64 encoding.
+      - `base64+zstd` — zstd-compressed base64; useful for large accounts.
+      - `jsonParsed` — returns structured JSON if the node has a parser for the account's program. Falls back to `base64` when no parser is available.
+    </ParamField>
+
+    <ParamField path="commitment" type="string" default="finalized">
+      Commitment level to use when querying state. One of `processed`, `confirmed`, or `finalized`.
+    </ParamField>
+
+    <ParamField path="dataSlice" type="object">
+      Limit the returned data to a byte range. Only valid with `base58`, `base64`, or `base64+zstd` encoding.
+
+      <Expandable title="dataSlice fields">
+        <ParamField path="offset" type="number" required>
+          Byte offset at which to start the slice.
+        </ParamField>
+        <ParamField path="length" type="number" required>
+          Number of bytes to return.
+        </ParamField>
+      </Expandable>
+    </ParamField>
+
+    <ParamField path="minContextSlot" type="number">
+      Minimum slot at which the request may be evaluated. The node will return an error if its current slot is below this value.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## Response
+
+The result is wrapped in an RPC context object.
+
+<ResponseField name="context" type="object">
+  <Expandable title="context fields">
+    <ResponseField name="slot" type="number">
+      The slot at which this response was generated.
+    </ResponseField>
+    <ResponseField name="apiVersion" type="string">
+      The node's software version.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="value" type="object | null">
+  Account data, or `null` if no account exists at the given address.
+
+  <Expandable title="account fields">
+    <ResponseField name="lamports" type="number" required>
+      Number of lamports assigned to the account.
+    </ResponseField>
+    <ResponseField name="owner" type="string" required>
+      The base-58 encoded public key of the program that owns this account.
+    </ResponseField>
+    <ResponseField name="data" type="array | object" required>
+      Account data, encoded according to the requested format. For `base64` encoding this is a two-element array `[data, "base64"]`. For `jsonParsed` this is a structured object.
+    </ResponseField>
+    <ResponseField name="executable" type="boolean" required>
+      `true` if the account contains a program and is strictly read-only.
+    </ResponseField>
+    <ResponseField name="rentEpoch" type="number" required>
+      The epoch at which this account will next owe rent.
+    </ResponseField>
+    <ResponseField name="space" type="number">
+      The data size of the account in bytes.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+
+```bash cURL
+curl https://api.devnet.solana.com \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "getAccountInfo",
+    "params": [
+      "vines1vzrYbzLMRdu58ou5XTby4qAqVRLmqo36NKPTg",
+      {
+        "encoding": "base64",
+        "commitment": "confirmed"
+      }
+    ]
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch("https://api.devnet.solana.com", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    jsonrpc: "2.0",
+    id: 1,
+    method: "getAccountInfo",
+    params: [
+      "vines1vzrYbzLMRdu58ou5XTby4qAqVRLmqo36NKPTg",
+      { encoding: "base64", commitment: "confirmed" },
+    ],
+  }),
+});
+
+const { result } = await response.json();
+console.log(result.value);
+```
+
+</CodeGroup>
+
+### Response example
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "context": {
+      "slot": 278066127,
+      "apiVersion": "1.18.0"
+    },
+    "value": {
+      "lamports": 1000000000,
+      "owner": "11111111111111111111111111111111",
+      "data": ["", "base64"],
+      "executable": false,
+      "rentEpoch": 361,
+      "space": 0
+    }
+  }
+}
+```
+
+### Account not found
+
+When no account exists at the given address, `value` is `null`:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "context": { "slot": 278066127 },
+    "value": null
+  }
+}
+```
+
+<Tip>
+Use `encoding: "jsonParsed"` when querying well-known program accounts such as token accounts, mint accounts, or stake accounts. The node will return a human-readable JSON structure instead of raw bytes.
+</Tip>

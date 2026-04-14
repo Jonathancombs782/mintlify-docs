@@ -1,0 +1,244 @@
+---
+title: "Validator Operations Best Practices"
+description: "Day-to-day guidance on monitoring, key management, software upgrades, restarts, snapshot usage, and ledger maintenance for Solana validators."
+---
+
+Once your validator is running on testnet or mainnet-beta, the real work of operating it begins. Maximizing uptime, keeping software current, and responding quickly to problems all directly affect the rewards you earn and the trust your delegators place in you. The practices below are drawn from the experience of the Solana validator community and the official documentation.
+
+## Monitoring
+
+Knowing your validator is healthy before your delegators notice a problem is essential.
+
+### solana-watchtower
+
+`solana-watchtower` is a dedicated monitoring process that polls your validator and sends alerts when it goes delinquent or falls below a minimum SOL balance.
+
+Basic usage — monitor a validator by its identity public key:
+
+```bash
+solana-watchtower --monitor-active-stake --validator-identity \
+  2uTk98rqqwENevkPH2AHHzGHXgeGc1h6ku8hQUqWeXZp
+```
+
+Run `solana-watchtower --help` to see the full list of options, including Slack, Discord, Telegram, and Twilio notification flags.
+
+<Tip>
+  Run `solana-watchtower` on a **separate server** from your validator. If both processes share a machine and that machine loses power, you will not receive any alert.
+</Tip>
+
+Configure watchtower as a systemd service so it restarts automatically and persists across reboots. Set your notification environment variables in the unit file's `[Service]` section rather than in an interactive terminal session.
+
+### Telegram notifications
+
+To receive delinquency alerts in a Telegram group:
+
+1. Create a bot via `@BotFather` in Telegram (`/newbot`). Note the HTTP API token.
+2. Send `/start` to your new bot so it can receive messages.
+3. Create a Telegram group and add the bot to it.
+4. Retrieve your group chat ID from `https://api.telegram.org/bot<HTTP API Token>/getUpdates` — it is a negative number like `-781559558`.
+5. Export the environment variables where you run `solana-watchtower`:
+
+```bash
+export TELEGRAM_BOT_TOKEN=<HTTP API Token>
+export TELEGRAM_CHAT_ID=<negative chat id number>
+```
+
+Restart `solana-watchtower` to activate notifications. Test by briefly stopping your validator until it is marked delinquent — you should receive a message within about a minute, and an "all clear" message when you start the validator again.
+
+### Checking account balances
+
+Your validator's identity account must have enough SOL to pay vote transaction fees (up to 1.1 SOL per day). Check the balance at any time:
+
+```bash
+solana balance validator-keypair.json
+```
+
+Set a minimum balance alert in `solana-watchtower` so you are notified before the account is depleted.
+
+## Key management
+
+Your validator uses three keypairs. Understanding their roles and security requirements is critical.
+
+### Identity keypair
+
+The identity keypair signs every vote transaction your validator submits — potentially multiple times per second. It must be stored as a hot wallet on the validator server. Because it is exposed, keep only a few weeks' or months' worth of voting fees in the identity account, and top it up periodically from a more secure wallet.
+
+### Vote account keypair
+
+The vote account keypair identifies your vote account on-chain and is used when registering with the network. Once the account is created, only the public key matters for delegators. The keypair itself has no operational role afterward.
+
+### Authorized withdrawer keypair
+
+The withdrawer keypair controls all funds in your vote account and can change every aspect of the account, including your commission and validator identity.
+
+<Warning>
+  Never store the authorized-withdrawer keypair on your validator server. Keep it on a hardware wallet, paper wallet, or multisig in a secure offline location. Losing it means losing permanent control of your vote account and its funds.
+</Warning>
+
+To withdraw rewards from your vote account (run on a trusted computer, not the validator):
+
+```bash
+solana withdraw-from-vote-account \
+   vote-account-keypair.json \
+   person-keypair.json ALL \
+   --authorized-withdrawer authorized-withdrawer-keypair.json
+```
+
+## Restarting your validator
+
+Restarts are unavoidable — for upgrades, kernel updates, or hardware maintenance. Minimize their impact by avoiding restarts during your leader slots.
+
+Check the upcoming leader schedule:
+
+```bash
+solana leader-schedule
+```
+
+When you are ready to restart, use `solana-validator exit` rather than killing the process directly. This command waits for an idle window in the leader schedule before shutting down:
+
+```bash
+solana-validator exit --help
+```
+
+If you use systemd, the service will automatically restart the validator after the exit completes.
+
+## Keeping software up to date
+
+### Building from source (recommended)
+
+Building from source ensures the binary has not been tampered with and lets you optimize for your specific CPU:
+
+```bash
+# On your validator machine, from the solana source directory:
+cargo build --release --target-dir /home/sol/bin
+```
+
+Pass `-march=native` via `RUSTFLAGS` to target your exact microarchitecture.
+
+### Using solana-install
+
+If you need to update quickly, use `solana-install`:
+
+```bash
+solana-install init 1.14.17
+```
+
+<Note>
+  Downloading or building the new version does not interrupt your running validator. The new binary is only activated after you restart the process.
+</Note>
+
+### Restarting after an upgrade
+
+Use `solana-validator exit` to restart cleanly. After restart, verify the version by grepping the logs:
+
+```bash
+grep -B1 'Starting validator with' /home/sol/solana-validator.log
+```
+
+## Snapshot management
+
+Snapshots let a new or restarted validator catch up to the network without replaying the full ledger.
+
+### When not to download a snapshot
+
+If your downtime is short (a few hours or less), avoid downloading a new snapshot. Maintaining your local ledger state is better for the cluster and preserves your validator's history.
+
+Add `--no-snapshot-fetch` to your startup script to skip snapshot downloads on restart:
+
+```bash
+--no-snapshot-fetch
+```
+
+After restarting with this flag, monitor catchup:
+
+```bash
+solana catchup <pubkey>
+```
+
+If your validator falls progressively further behind after several hours, you may need to download a snapshot.
+
+### When to download a snapshot
+
+Download a snapshot when you are starting a fresh validator for the first time, or when your validator has fallen so far behind that local catchup is no longer practical. Simply omit `--no-snapshot-fetch` and your validator will automatically download from a `--known-validator`.
+
+If one known validator downloads too slowly, add:
+
+```bash
+--minimal-snapshot-download-speed <bytes-per-second>
+```
+
+### Manually downloading a snapshot
+
+If automatic download fails, find the IP address of a known validator from gossip:
+
+```bash
+solana gossip | grep 5D1fNXzvv5NjV1ysLjirC4WY92RNsVH18vjmcszZd8on
+```
+
+Download the snapshot directly (the port in the fifth column of gossip output):
+
+```bash
+wget --trust-server-names http://139.178.68.207:80/snapshot.tar.bz2
+wget --trust-server-names http://139.178.68.207:80/incremental-snapshot.tar.bz2
+```
+
+Move the files into your ledger directory, then restart with `--no-snapshot-fetch`.
+
+## Ledger management
+
+### Limiting ledger size
+
+Use `--limit-ledger-size` in your startup script to cap on-disk ledger growth. The default target is approximately 500 GB for the blockstore. Adjust the value passed to the flag if you need more or less history.
+
+### Log rotation
+
+The validator log file grows continuously. Configure `logrotate` to rotate it daily and keep seven days of history.
+
+Create `/etc/logrotate.d/sol`:
+
+```bash
+cat > logrotate.sol <<EOF
+/home/sol/solana-validator.log {
+  rotate 7
+  daily
+  missingok
+  postrotate
+    systemctl kill -s USR1 sol.service
+  endscript
+}
+EOF
+sudo cp logrotate.sol /etc/logrotate.d/sol
+systemctl restart logrotate.service
+```
+
+<Warning>
+  Your `validator.sh` startup script must use `exec solana-validator ...` (not just `solana-validator ...`). Without `exec`, the `USR1` signal sent by logrotate will kill the wrapper script and take the validator process down with it.
+</Warning>
+
+## System security
+
+### Run as a non-root user
+
+Always run `solana-validator` as the `sol` user, not as `root`. If an attacker exploits a vulnerability in the process, running as a non-privileged user limits the damage.
+
+### Keep Ubuntu packages current
+
+Update packages at least weekly to patch known security vulnerabilities:
+
+```bash
+sudo apt update && sudo apt upgrade
+```
+
+### Close unused ports
+
+Use `ufw` to close any port not explicitly required for validator operation. Only ports 8000–10000 (or your configured `--dynamic-port-range`) need to be open for P2P traffic.
+
+### Prevent brute-force SSH attacks
+
+Install `fail2ban` to automatically ban IP addresses after repeated failed login attempts:
+
+```bash
+sudo apt install fail2ban
+```
+
+Disable password-based SSH authentication and use key-based authentication exclusively.

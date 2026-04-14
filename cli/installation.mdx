@@ -1,0 +1,236 @@
+---
+title: "Install the Solana CLI Tool Suite"
+description: "Install the Solana CLI tools on macOS, Linux, or Windows using the install script, prebuilt binaries, Homebrew, or by building from source."
+---
+
+The Solana CLI tool suite gives you everything you need to interact with the Solana network from your terminal — creating wallets, sending transactions, deploying programs, and more. You can install it in several ways depending on your operating system and workflow preferences.
+
+## Installation methods
+
+<CardGroup cols={2}>
+  <Card title="Solana install tool" icon="terminal">
+    The simplest option. A one-line script that handles everything for you.
+  </Card>
+  <Card title="Prebuilt binaries" icon="download">
+    Download and extract a release archive without a package manager.
+  </Card>
+  <Card title="Homebrew" icon="beer-mug">
+    Use Homebrew on macOS or Linux for package-manager-style installs.
+  </Card>
+  <Card title="Build from source" icon="code">
+    Compile Solana yourself for maximum control or unsupported platforms.
+  </Card>
+</CardGroup>
+
+## Use Solana's install tool
+
+The install tool is the recommended method for most users. It downloads the correct release for your system, places the binaries in your home directory, and prints instructions to update your `PATH`.
+
+<Tabs>
+  <Tab title="macOS and Linux">
+    <Steps>
+      <Step title="Run the installer">
+        Open a terminal and run:
+
+        ```bash
+        sh -c "$(curl -sSfL https://release.solana.com/stable/install)"
+        ```
+
+        Replace `stable` with `beta`, `edge`, or a specific version tag such as `v1.18.0` if you need a particular release.
+
+        A successful install prints output similar to:
+
+        ```text
+        downloading stable installer
+        Configuration: /home/solana/.config/solana/install/config.yml
+        Active release directory: /home/solana/.local/share/solana/install/active_release
+        * Release version: stable
+        * Release URL: https://github.com/solana-labs/solana/releases/download/...
+        Update successful
+        ```
+      </Step>
+      <Step title="Update your PATH">
+        If the installer prompts you to update your `PATH`, copy and run the command it provides. This is typically something like:
+
+        ```bash
+        export PATH="/home/solana/.local/share/solana/install/active_release/bin:$PATH"
+        ```
+
+        Add this line to your shell profile (`.bashrc`, `.zshrc`, etc.) to make it permanent.
+      </Step>
+      <Step title="Verify the installation">
+        Confirm the tools are on your `PATH`:
+
+        ```bash
+        solana --version
+        ```
+
+        You should see a version string such as `solana-cli 1.18.0`.
+      </Step>
+    </Steps>
+
+    <Tip>
+      After installing, run `solana-install update` at any time to upgrade to the latest release.
+    </Tip>
+  </Tab>
+  <Tab title="Windows">
+    <Steps>
+      <Step title="Open an Administrator Command Prompt">
+        Search for **Command Prompt** in the Windows search bar, right-click it, and select **Open as Administrator**. Click **Yes** if prompted by a User Account Control dialog.
+      </Step>
+      <Step title="Download the installer">
+        Copy and paste the following command, then press Enter:
+
+        ```bash
+        cmd /c "curl https://release.solana.com/stable/solana-install-init-x86_64-pc-windows-msvc.exe --output C:\solana-install-tmp\solana-install-init.exe --create-dirs"
+        ```
+      </Step>
+      <Step title="Run the installer">
+        ```bash
+        C:\solana-install-tmp\solana-install-init.exe stable
+        ```
+
+        If Windows shows a security warning, allow the program to run. Press Enter when the installer finishes.
+      </Step>
+      <Step title="Re-open a standard Command Prompt">
+        Close the Administrator window, then open a new Command Prompt as a normal user. This ensures the updated `PATH` takes effect.
+      </Step>
+      <Step title="Verify the installation">
+        ```bash
+        solana --version
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## Download prebuilt binaries
+
+If you prefer not to use the install script, you can download a release archive directly from GitHub and add the binaries to your `PATH` manually.
+
+<Tabs>
+  <Tab title="Linux">
+    Download `solana-release-x86_64-unknown-linux-gnu.tar.bz2` from the [latest release page](https://github.com/solana-labs/solana/releases/latest), then extract it:
+
+    ```bash
+    tar jxf solana-release-x86_64-unknown-linux-gnu.tar.bz2
+    cd solana-release/
+    export PATH=$PWD/bin:$PATH
+    ```
+  </Tab>
+  <Tab title="macOS">
+    Download `solana-release-x86_64-apple-darwin.tar.bz2` from the [latest release page](https://github.com/solana-labs/solana/releases/latest), then extract it:
+
+    ```bash
+    tar jxf solana-release-x86_64-apple-darwin.tar.bz2
+    cd solana-release/
+    export PATH=$PWD/bin:$PATH
+    ```
+  </Tab>
+  <Tab title="Windows">
+    Download `solana-release-x86_64-pc-windows-msvc.tar.bz2` from the [latest release page](https://github.com/solana-labs/solana/releases/latest) and extract it using WinZip or a similar tool. Then open a Command Prompt, navigate to the extracted directory, and run:
+
+    ```bash
+    cd solana-release/
+    set PATH=%cd%/bin;%PATH%
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+  The `PATH` changes above only apply to your current terminal session. To make them permanent, add the `export PATH=...` line to your shell profile on macOS/Linux, or update your system environment variables on Windows.
+</Note>
+
+## Use Homebrew
+
+If you have [Homebrew](https://brew.sh/) installed on macOS or Linux, you can install Solana through its formula:
+
+```bash
+brew install solana
+```
+
+Verify the install:
+
+```bash
+solana --version
+```
+
+<Note>
+  The Homebrew formula is updated after each Solana release, but it may occasionally lag behind the latest version. Use the install tool if you need the newest release immediately.
+</Note>
+
+## Build from source
+
+Building from source lets you compile any commit or branch and is useful for contributors or platforms without prebuilt binaries.
+
+### Prerequisites
+
+<Tabs>
+  <Tab title="Debian / Ubuntu">
+    Install Rust:
+
+    ```bash
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+    ```
+
+    Install build dependencies:
+
+    ```bash
+    apt-get install \
+        build-essential \
+        pkg-config \
+        libudev-dev llvm libclang-dev \
+        protobuf-compiler
+    ```
+  </Tab>
+  <Tab title="macOS">
+    Install [Homebrew](https://brew.sh/) if you haven't already:
+
+    ```bash
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    ```
+
+    Then install the required tools:
+
+    ```bash
+    brew install rust pkg-config libudev protobuf llvm coreutils
+    ```
+
+    Follow any `PATH` configuration instructions printed at the end of the `brew install` output.
+  </Tab>
+  <Tab title="Windows">
+    1. Install Rust from [rustup.rs](https://www.rust-lang.org/tools/install).
+    2. Install [Build Tools for Visual Studio 2019 or later](https://visualstudio.microsoft.com/downloads/) with the **C++ build tools** workload.
+    3. Install [LLVM](https://releases.llvm.org/download.html).
+    4. Download `protoc` from the [Protocol Buffers releases page](https://github.com/protocolbuffers/protobuf/releases) and add it to your `PATH`.
+
+    <Info>
+      Windows 10 and 11 users may find it easier to install [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/install) and then follow the Debian/Ubuntu instructions inside the WSL environment.
+    </Info>
+  </Tab>
+</Tabs>
+
+### Build and install
+
+Download the source archive from the [Solana GitHub releases page](https://github.com/solana-labs/solana/releases/latest), extract it, then run:
+
+```bash
+./scripts/cargo-install-all.sh .
+export PATH=$PWD/bin:$PATH
+```
+
+Once built, you can also initialize the Solana install manager with the compiled binaries:
+
+```bash
+solana-install init
+```
+
+## Verify your installation
+
+No matter which installation method you used, confirm everything is working:
+
+```bash
+solana --version
+```
+
+You should see output like `solana-cli 1.18.0 (src:...)`. If the command is not found, check that the Solana `bin` directory is included in your `PATH`.

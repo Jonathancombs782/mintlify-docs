@@ -1,0 +1,210 @@
+---
+title: "Use Durable Nonces for Offline Transactions"
+description: "Create a nonce account, use it as a long-lived blockhash substitute in offline transactions, advance the nonce, and manage nonce account authority."
+---
+
+Every Solana transaction includes a recent blockhash that the network uses to prevent replay attacks. That blockhash expires after approximately one minute, which is usually fine for online signing. However, if your signing workflow takes longer — because of an air-gapped device, physical mail, multi-party approvals, or other delays — the blockhash will expire before you can broadcast. Durable transaction nonces solve this problem by replacing the short-lived blockhash with a value stored in a dedicated on-chain account that does not expire until you deliberately advance it.
+
+## How durable nonces work
+
+A nonce account is a special Solana account that stores a nonce value. When you create a transaction using the nonce account's stored value as the blockhash, the network holds the transaction valid indefinitely — the clock does not start until you submit. Once you submit, the nonce advances automatically to a new value, preventing replay.
+
+<Note>
+  Nonce accounts must be rent-exempt. The minimum balance (usually around 0.00136416 SOL) must remain in the account at all times.
+</Note>
+
+## Create a nonce account
+
+<Steps>
+  <Step title="Generate a keypair for the nonce account">
+    ```bash
+    solana-keygen new -o nonce-keypair.json
+    ```
+
+    <Tip>
+      To keep the nonce keypair entirely offline, generate it using [paper wallet seed phrase generation](/cli/wallets#generate-a-seed-phrase) on an air-gapped machine.
+    </Tip>
+  </Step>
+  <Step title="Create the nonce account on-chain">
+    Fund the nonce account with enough SOL to be rent-exempt:
+
+    ```bash
+    solana create-nonce-account nonce-keypair.json 1
+    ```
+
+    Output:
+
+    ```text
+    2SymGjGV4ksPdpbaqWFiDoBz8okvtiik4KE9cnMQgRHrRLySSdZ6jrEcpPifW4xUpp4z66XM9d9wM48sA7peG2XL
+    ```
+
+    This is the transaction signature for the account creation.
+  </Step>
+</Steps>
+
+## Query the stored nonce value
+
+Before signing a transaction with a durable nonce, retrieve the current nonce value from the account:
+
+```bash
+solana nonce nonce-keypair.json
+```
+
+Output:
+
+```text
+8GRipryfxcsxN8mAGjy8zbFo9ezaUsh47TsPzmZbuytU
+```
+
+Pass this value as `--blockhash` when constructing and signing your offline transaction.
+
+## Inspect the nonce account
+
+For a human-readable view of the nonce account state:
+
+```bash
+solana nonce-account nonce-keypair.json
+```
+
+Output:
+
+```text
+balance: 0.5 SOL
+minimum balance required: 0.00136416 SOL
+nonce: DZar6t2EaCFQTbUP4DHKwZ1wT8gCPW2aRfkVWhydkBvS
+```
+
+## Use a nonce in a transaction
+
+Any CLI command that supports offline signing also supports durable nonces. Add two extra flags to your command:
+
+- `--nonce <NONCE_ACCOUNT_ADDRESS>` — the nonce account to use
+- `--nonce-authority <KEYPAIR>` — the keypair authorized to advance the nonce (optional; defaults to the fee payer)
+
+**Example: transfer SOL using a durable nonce**
+
+```bash
+solana transfer --blockhash F7vmkY3DTaxfagttWjQweib42b6ZHADSx94Tw8gHx3W7 \
+    --nonce nonce.json \
+    bob.json 0.01
+```
+
+The blockhash value `F7vmkY3DTaxfagttWjQweib42b6ZHADSx94Tw8gHx3W7` comes from `solana nonce-account nonce.json`. Using a durable nonce means this transaction stays valid until it is submitted, regardless of how much time passes.
+
+## Advance the nonce manually
+
+In most cases the nonce advances automatically when the transaction that uses it is submitted. You can also advance it manually at any time — for example, to invalidate a signed transaction before it is submitted:
+
+```bash
+solana new-nonce nonce-keypair.json
+```
+
+Output:
+
+```text
+44jYe1yPKrjuYDmoFTdgPjg8LFpYyh1PFKJqm5SC1PiSyAL8iw1bhadcAX1SL7KDmREEkmHpYvreKoNv6fZgfvUK
+```
+
+Any signed transaction that referenced the old nonce value is now permanently invalid.
+
+## Withdraw funds from a nonce account
+
+To reclaim the SOL locked in a nonce account:
+
+```bash
+solana withdraw-from-nonce-account nonce-keypair.json ~/.config/solana/id.json 0.5
+```
+
+Withdraw the full balance to close the account entirely.
+
+## Assign a new authority
+
+By default, the keypair used to create the nonce account has full authority over it. You can transfer that authority to a different account:
+
+```bash
+solana authorize-nonce-account nonce-keypair.json nonce-authority.json
+```
+
+The new authority (`nonce-authority.json`) gains full control, including the ability to advance or close the nonce account.
+
+## End-to-end example: pay with a durable nonce
+
+The following example shows Alice paying Bob 0.01 SOL using a durable nonce, demonstrating how the nonce rescues a transaction after the blockhash has expired.
+
+<Steps>
+  <Step title="Create accounts">
+    ```bash
+    solana-keygen new -o alice.json
+    solana-keygen new -o nonce.json
+    solana-keygen new -o bob.json
+    ```
+  </Step>
+  <Step title="Fund Alice">
+    ```bash
+    solana airdrop -k alice.json 1
+    ```
+
+    ```text
+    1 SOL
+    ```
+  </Step>
+  <Step title="Create Alice's nonce account">
+    ```bash
+    solana create-nonce-account -k alice.json nonce.json 0.1
+    ```
+  </Step>
+  <Step title="Look up the stored nonce">
+    ```bash
+    solana nonce-account nonce.json
+    ```
+
+    ```text
+    balance: 0.1 SOL
+    minimum balance required: 0.00136416 SOL
+    nonce: F7vmkY3DTaxfagttWjQweib42b6ZHADSx94Tw8gHx3W7
+    ```
+  </Step>
+  <Step title="Send the transaction using the durable nonce">
+    ```bash
+    solana transfer -k alice.json \
+        --blockhash F7vmkY3DTaxfagttWjQweib42b6ZHADSx94Tw8gHx3W7 \
+        --nonce nonce.json \
+        bob.json 0.01
+    ```
+
+    ```text
+    HR1368UKHVZyenmH7yVz5sBAijV6XAPeWbEiXEGVYQorRMcoijeNAbzZqEZiH8cDB8tk65ckqeegFjK8dHwNFgQ
+    ```
+  </Step>
+  <Step title="Verify the result">
+    ```bash
+    solana balance -k bob.json
+    ```
+
+    ```text
+    0.01 SOL
+    ```
+
+    The nonce has automatically advanced to a new value, preventing replay:
+
+    ```bash
+    solana nonce-account nonce.json
+    ```
+
+    ```text
+    balance: 0.1 SOL
+    minimum balance required: 0.00136416 SOL
+    nonce: 6bjroqDcZgTv6Vavhqf81oBHTv3aMnX19UTB51YhAZnN
+    ```
+  </Step>
+</Steps>
+
+## Commands that support durable nonces
+
+Any subcommand that also supports offline signing accepts the `--nonce` and `--nonce-authority` flags:
+
+- `pay`
+- `delegate-stake`
+- `deactivate-stake`
+
+For these commands, pass `--nonce <NONCE_ACCOUNT_ADDRESS>` to substitute the durable nonce for the standard recent blockhash.

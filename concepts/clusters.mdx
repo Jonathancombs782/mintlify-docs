@@ -1,0 +1,120 @@
+---
+title: "What Is a Solana Cluster?"
+description: "Learn what a Solana cluster is, how validators, leaders, and slots work together, what epochs are, and how Devnet, Testnet, and Mainnet Beta differ."
+---
+
+A **Solana cluster** is a set of validators that work together to maintain a shared ledger and process client transactions. All validators in a cluster share a common genesis block — the very first block — which establishes the initial state of the network. Clusters that share a genesis block attempt to converge on the same ledger; clusters with different genesis blocks ignore each other entirely.
+
+When you send a transaction, you are sending it to a specific cluster. A transaction submitted to the wrong cluster is quietly rejected.
+
+## How a cluster is formed
+
+Before any validators can join, someone creates a **genesis config** — a configuration file that specifies the initial token supply (held in a *mint* account) and designates a **bootstrap validator**. The bootstrap validator appends the first entries to the ledger. Additional validators then register with any existing cluster member, and membership propagates through the gossip protocol. Once registered, a validator receives entries from the current leader and votes to confirm them.
+
+## Validators and the leader role
+
+Every node in a cluster runs the same validator software, but at any given moment one validator holds the **leader** role. The leader is responsible for:
+
+1. Receiving transactions from clients.
+2. Ordering and timestamping those transactions into entries using **Proof of History (PoH)**.
+3. Bundling entries into blocks and broadcasting them to the rest of the cluster.
+
+The leader is determined by the **leader schedule**, which is computed from the stake distribution at the start of each epoch. Validators with more stake delegated to them get proportionally more leader slots.
+
+## Slots and epochs
+
+Time on Solana is divided into **slots**. Each slot is an opportunity for the designated leader to produce a block. Slots last approximately 400 milliseconds, though actual duration varies.
+
+A fixed number of slots are grouped into an **epoch**. Epochs are important because:
+
+- The leader schedule for the entire epoch is computed at epoch boundaries.
+- Staking rewards are distributed at the end of each epoch.
+- Stake activations and deactivations take effect at epoch boundaries.
+
+You can query the current epoch information using the `getEpochInfo` RPC method:
+
+```bash
+curl https://api.mainnet-beta.solana.com -X POST \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "getEpochInfo"
+  }'
+```
+
+The response includes the current `epoch`, the current `slot`, and the number of `slotsInEpoch`.
+
+## Block confirmation and Turbine
+
+When the leader produces a block, it must propagate to hundreds or thousands of validators so they can vote on it. Solana uses a technique called **Turbine block propagation** to do this efficiently. Rather than sending the full block to every validator, the leader breaks the block into smaller shreds and sends batches to different validators. Each validator then shares its batch with peers, so the full block reconstructs across the network in a logarithmic number of hops — keeping confirmation times low even as the validator set grows.
+
+Confirmation is defined as the duration from when the leader timestamps a new entry to the moment when a **supermajority** (more than two-thirds) of stake-weighted votes confirm the block.
+
+## Available clusters
+
+Solana operates three public clusters, each with its own genesis block and purpose:
+
+<CardGroup cols={3}>
+  <Card title="Mainnet Beta" icon="globe">
+    The production network where real SOL has real monetary value. Use this cluster for deployed applications and live user transactions.
+
+    **RPC endpoint:** `https://api.mainnet-beta.solana.com`
+  </Card>
+  <Card title="Devnet" icon="flask">
+    A development network where SOL has no monetary value. Devnet is reset periodically and is intended for application development and testing. You can airdrop free SOL using the `solana airdrop` command.
+
+    **RPC endpoint:** `https://api.devnet.solana.com`
+  </Card>
+  <Card title="Testnet" icon="bug">
+    A testing network used primarily by the Solana core team and validators to test upcoming features and performance improvements. It may be less stable than Devnet.
+
+    **RPC endpoint:** `https://api.testnet.solana.com`
+  </Card>
+</CardGroup>
+
+<Warning>
+Never use Mainnet Beta for development or testing. Mistakes on Mainnet Beta cost real SOL. Use Devnet for all development work.
+</Warning>
+
+## Connecting to a cluster via RPC
+
+You interact with a cluster through its **JSON-RPC API**. Any validator can serve as an RPC node, though dedicated RPC nodes are preferred for high-volume applications because they are optimized for read queries without participating in consensus voting.
+
+```typescript
+import { Connection, clusterApiUrl } from "@solana/web3.js";
+
+// Connect to Devnet
+const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
+
+// Fetch the latest blockhash
+const { blockhash } = await connection.getLatestBlockhash();
+```
+
+<Tip>
+For production applications, consider using a dedicated RPC provider rather than the public endpoints. Public endpoints have rate limits and are shared across all users.
+</Tip>
+
+## Switching clusters with the CLI
+
+The Solana CLI lets you switch between clusters using the `config set` command:
+
+```bash
+# Switch to Devnet
+solana config set --url devnet
+
+# Switch to Mainnet Beta
+solana config set --url mainnet-beta
+
+# Verify current cluster
+solana config get
+```
+
+<CardGroup cols={2}>
+  <Card title="Staking" icon="coins" href="/concepts/staking">
+    Learn how stake distribution determines the leader schedule and reward distribution.
+  </Card>
+  <Card title="Validators" icon="server" href="/validators/overview">
+    Understand what it takes to run a validator node in the cluster.
+  </Card>
+</CardGroup>

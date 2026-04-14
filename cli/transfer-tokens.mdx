@@ -1,0 +1,142 @@
+---
+title: "Transfer SOL Tokens with the Solana CLI"
+description: "Airdrop test SOL on Devnet, check your account balance, and transfer SOL to another address using the Solana CLI transfer command."
+---
+
+The Solana CLI makes it straightforward to send and receive SOL tokens. Whether you are testing on Devnet with free airdropped tokens or managing real funds on Mainnet Beta, the commands are the same — only the cluster URL differs. Before you begin, make sure you have [created a wallet](/cli/wallets) and have access to its keypair.
+
+## Get test tokens on Devnet
+
+Devnet provides a free token faucet so you can try things out without risking real SOL. Airdrop 1 SOL to your address:
+
+```bash
+solana airdrop 1 <RECIPIENT_ACCOUNT_ADDRESS> --url https://api.devnet.solana.com
+```
+
+Replace `<RECIPIENT_ACCOUNT_ADDRESS>` with your base58-encoded public key. The command returns a transaction signature when the airdrop is successful.
+
+<Note>
+  Devnet tokens have **no monetary value**. You can airdrop freely for testing without any risk.
+</Note>
+
+If the airdrop appears to have failed, inspect the transaction for details:
+
+```bash
+solana confirm -v <TRANSACTION_SIGNATURE>
+```
+
+## Check your balance
+
+Confirm your airdrop was received by checking the account balance:
+
+```bash
+solana balance <ACCOUNT_ADDRESS> --url https://api.devnet.solana.com
+```
+
+If you have already configured your CLI to target Devnet with `solana config set --url`, you can omit the `--url` flag:
+
+```bash
+solana balance <ACCOUNT_ADDRESS>
+```
+
+## Transfer tokens to another address
+
+To send SOL to a recipient, you need your keypair (to sign the transaction), the recipient's public key, and the amount to send:
+
+```bash
+solana transfer --from <KEYPAIR> <RECIPIENT_ACCOUNT_ADDRESS> <AMOUNT> \
+    --allow-unfunded-recipient \
+    --url https://api.devnet.solana.com \
+    --fee-payer <KEYPAIR>
+```
+
+- `<KEYPAIR>` — path to your keypair file (or `prompt://` for a paper wallet)
+- `<RECIPIENT_ACCOUNT_ADDRESS>` — the base58 public key of the recipient
+- `<AMOUNT>` — the number of SOL to send (e.g. `0.5`)
+- `--allow-unfunded-recipient` — required when sending to an address that does not yet have a balance
+
+## End-to-end example on Devnet
+
+The following walkthrough creates two wallets, airdrops SOL to the first, and transfers some to the second.
+
+<Steps>
+  <Step title="Create a file system wallet">
+    ```bash
+    solana-keygen new --outfile my_solana_wallet.json
+    ```
+
+    The output shows your new public key:
+
+    ```text
+    pubkey: DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK
+    ```
+  </Step>
+  <Step title="Airdrop 1 SOL to the first wallet">
+    ```bash
+    solana airdrop 1 DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK --url https://api.devnet.solana.com
+    ```
+
+    ```text
+    1 SOL
+    ```
+  </Step>
+  <Step title="Verify the balance">
+    ```bash
+    solana balance DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK --url https://api.devnet.solana.com
+    ```
+
+    ```text
+    1 SOL
+    ```
+  </Step>
+  <Step title="Create a second wallet to receive tokens">
+    ```bash
+    solana-keygen new --no-passphrase --no-outfile
+    ```
+
+    Copy the public key from the `pubkey:` line in the output:
+
+    ```text
+    pubkey: 7S3P4HxJpyyigGzodYwHtCxZyUQe9JiBMHyRWXArAaKv
+    ```
+  </Step>
+  <Step title="Transfer 0.5 SOL to the second wallet">
+    ```bash
+    solana transfer --from my_solana_wallet.json 7S3P4HxJpyyigGzodYwHtCxZyUQe9JiBMHyRWXArAaKv 0.5 \
+        --allow-unfunded-recipient \
+        --url https://api.devnet.solana.com \
+        --fee-payer my_solana_wallet.json
+    ```
+
+    The command returns a transaction signature on success.
+  </Step>
+  <Step title="Confirm the updated balances">
+    ```bash
+    solana balance DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK --url https://api.devnet.solana.com
+    ```
+
+    ```text
+    0.499995 SOL
+    ```
+
+    The sender has slightly less than 0.5 SOL remaining because a small transaction fee was deducted.
+
+    ```bash
+    solana balance 7S3P4HxJpyyigGzodYwHtCxZyUQe9JiBMHyRWXArAaKv --url https://api.devnet.solana.com
+    ```
+
+    ```text
+    0.5 SOL
+    ```
+  </Step>
+</Steps>
+
+## Receive tokens
+
+To receive tokens from someone else, share your wallet's public key. You can display it at any time:
+
+```bash
+solana-keygen pubkey <KEYPAIR>
+```
+
+Where `<KEYPAIR>` is the path to your keypair file, `prompt://` for a paper wallet, or a hardware wallet URI such as `usb://ledger?key=0`. The resulting base58 string is your wallet address — give this to the sender.

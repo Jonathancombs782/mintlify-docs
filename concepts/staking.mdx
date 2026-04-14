@@ -1,0 +1,120 @@
+---
+title: "How Staking Works on Solana"
+description: "Understand Solana staking: stake accounts, delegation, activation and deactivation states, epoch-based reward distribution, and the two staking authorities."
+---
+
+Staking on Solana is the process of locking up SOL to support the security and operation of the network. When you stake SOL, you delegate it to a validator of your choice. In exchange, you receive a proportional share of the inflation rewards that the network distributes at the end of each epoch. You retain ownership of your staked SOL at all times and can choose to unstake it, though a warm-up and cool-down period applies.
+
+## Stake accounts
+
+Your staked SOL is held in a **stake account** — a special account owned by the Stake Program (`Stake11111111111111111111111111111111111111`). A stake account is separate from your wallet account. You create one explicitly and then delegate it to a validator.
+
+Each stake account has two authority roles:
+
+| Authority | Permissions |
+|---|---|
+| **Stake authority** | Can delegate, deactivate, re-delegate, and split the stake account. |
+| **Withdraw authority** | Can withdraw lamports from the stake account back to any destination account. |
+
+You can assign the same keypair to both roles, or separate them for additional security — for example, keeping the withdraw authority in cold storage.
+
+```bash
+# Create a new stake account with 10 SOL
+solana create-stake-account stake-account.json 10
+
+# Delegate to a validator vote account
+solana delegate-stake stake-account.json <VOTE_ACCOUNT_ADDRESS>
+```
+
+<Note>
+The stake authority and withdraw authority are set when the stake account is created. You can change them later using the `solana stake-authorize` command, but only the current authority holder can do so.
+</Note>
+
+## Stake account states
+
+A stake account moves through four states during its lifecycle:
+
+<AccordionGroup>
+  <Accordion title="Activating">
+    After you delegate a stake account, it enters the **activating** state. The stake is warming up — it is not yet counted toward the validator's vote weight and does not yet earn rewards. Activation takes one full epoch to complete.
+  </Accordion>
+  <Accordion title="Active">
+    Once the warm-up epoch ends, the stake becomes **active**. It now contributes to the validator's stake weight, influences the leader schedule, and earns rewards at the end of each epoch.
+  </Accordion>
+  <Accordion title="Deactivating">
+    When you run `solana deactivate-stake`, the account enters the **deactivating** state. The stake is cooling down — it still contributes to vote weight during the cool-down epoch but will not earn new rewards. Deactivation also takes one full epoch.
+  </Accordion>
+  <Accordion title="Inactive">
+    After the cool-down epoch, the stake becomes **inactive**. The lamports are unlocked and can be withdrawn to any account using the withdraw authority. You can also re-delegate an inactive stake account without withdrawing it first.
+  </Accordion>
+</AccordionGroup>
+
+<Warning>
+Both activation and deactivation take at least one full epoch (approximately 2–3 days on Mainnet Beta). Plan accordingly — you cannot access your staked SOL instantly after deactivating.
+</Warning>
+
+## Delegating to a validator
+
+When you delegate a stake account, you point it at a validator's **vote account** — not the validator's identity key. The vote account is the on-chain record of the validator's votes and accumulated rewards.
+
+Choosing a validator involves several factors:
+
+- **Commission** — the percentage of epoch rewards the validator retains for itself. The remainder goes to stakers.
+- **Uptime and performance** — validators that miss votes or produce poor-quality blocks earn fewer rewards for their delegators.
+- **Skip rate** — the percentage of assigned leader slots the validator failed to produce a block for.
+
+You can view validator performance statistics using the Solana explorer or the `solana validators` CLI command.
+
+```bash
+# View all active validators and their stake
+solana validators
+
+# View details of a specific stake account
+solana stake-account <STAKE_ACCOUNT_ADDRESS>
+```
+
+## Epochs and reward distribution
+
+Rewards are distributed at the **start of each epoch** for the preceding epoch's performance. The Solana network funds rewards through protocol inflation — new SOL is minted and distributed to stakers and validators proportionally.
+
+The inflation schedule starts at an initial rate (8% annually) and tapers down to a terminal rate (1.5% annually) at a rate of 15% reduction per year until the terminal rate is reached.
+
+<Info>
+Rewards are automatically added to your stake account's lamport balance and compound over time. You do not need to manually claim them — they appear in your stake account at the beginning of the next epoch.
+</Info>
+
+You can check recent epoch reward information using the `getInflationReward` RPC method, passing your stake account's public key:
+
+```bash
+curl https://api.mainnet-beta.solana.com -X POST \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "getInflationReward",
+    "params": [
+      ["<STAKE_ACCOUNT_ADDRESS>"]
+    ]
+  }'
+```
+
+## Slashing
+
+Solana **does not currently implement slashing**. In many proof-of-stake blockchains, validators can have a portion of their stake destroyed ("slashed") as a penalty for provably malicious behavior such as double-signing. On Solana, the network relies on social consensus and validator reputation to disincentivize misbehavior. Slashing has been discussed as a future addition, but it is not active on Mainnet Beta.
+
+<Tip>
+Because there is no slashing risk, staking on Solana carries no risk of losing your principal from validator misbehavior. Your lamports are always safe in the stake account — the worst outcome is earning fewer rewards if your chosen validator underperforms.
+</Tip>
+
+## The StakeHistory sysvar
+
+The runtime tracks the history of stake activations and deactivations across the cluster in the **StakeHistory sysvar**, available at address `SysvarStakeHistory1111111111111111111111111`. On-chain programs can read this sysvar to determine how much stake was active or inactive at any given epoch.
+
+<CardGroup cols={2}>
+  <Card title="Clusters" icon="network-wired" href="/concepts/clusters">
+    Understand how epochs, slots, and the leader schedule relate to staking.
+  </Card>
+  <Card title="CLI staking guide" icon="terminal" href="/cli/staking">
+    Step-by-step instructions for creating and managing stake accounts with the CLI.
+  </Card>
+</CardGroup>

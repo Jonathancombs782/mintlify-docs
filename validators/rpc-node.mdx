@@ -1,0 +1,157 @@
+---
+title: "Run a Solana RPC Node for API Access"
+description: "Configure solana-validator as a non-voting RPC node with --no-voting and --full-rpc-api to serve JSON-RPC requests to developers and applications."
+---
+
+An RPC node runs the same `solana-validator` binary as a consensus validator, but it does not participate in voting or block production. Instead, it responds to JSON-RPC requests from developers and applications, and forwards signed transactions to the current leader for inclusion in blocks. Running an RPC node gives you — or your users — direct, private access to the Solana blockchain without relying on a third-party endpoint.
+
+<Note>
+  Because RPC workloads and consensus voting compete for the same CPU and I/O resources, you should never combine both roles on a single machine. Use separate hardware for each.
+</Note>
+
+## How an RPC node differs from a consensus validator
+
+| | Consensus validator | RPC node |
+|---|---|---|
+| Votes on blocks | Yes | No (`--no-voting`) |
+| Earns inflation rewards | Yes | No |
+| Requires a vote account | Yes | No |
+| Exposes JSON-RPC API | Not recommended | Yes (`--full-rpc-api`) |
+| Typical users | Delegators / the network | Developers, dApps, exchanges |
+
+RPC operators do not earn inflation rewards. Common motivations include serving infrastructure for your own products, providing a public or private API endpoint as a business, or integrating a Geyser plugin for real-time account and block data.
+
+## Hardware requirements
+
+Use the [consensus validator hardware recommendations](/validators/requirements) as a **baseline minimum**, then apply these RPC-specific adjustments:
+
+| Component | RPC requirement |
+|---|---|
+| CPU | 16 cores / 32 threads or more |
+| RAM | 512 GB or more when `--account-index` is enabled |
+| Ledger disk | Larger if you need extended transaction history |
+| Accounts and ledger disks | Must be on separate NVMe drives |
+
+## Set up the base validator
+
+Follow the [validator setup guide](/validators/setup) to complete the following before configuring RPC-specific options:
+
+- Install the Solana CLI on both your local machine and the server
+- Prepare the server (create the `sol` user, format and mount disks, tune system parameters)
+- Copy your identity keypair to the server
+
+You do **not** need a vote account keypair for an RPC node.
+
+## Configure the RPC startup script
+
+Below is a complete example `validator.sh` for a testnet RPC node. Save it to `/home/sol/bin/validator.sh` and make it executable.
+
+```bash
+#!/bin/bash
+exec solana-validator \
+    --identity /home/sol/validator-keypair.json \
+    --known-validator 5D1fNXzvv5NjV1ysLjirC4WY92RNsVH18vjmcszZd8on \
+    --known-validator dDzy5SR3AXdYWVqbDEkVFdvSPCtS9ihF5kJkHCtXoFs \
+    --known-validator eoKpUABi59aT4rR9HGS3LcMecfut9x7zJyodWWP43YQ \
+    --known-validator 7XSY3MrYnK8vq693Rju17bbPkCN3Z7KvvfvJx4kdrsSY \
+    --known-validator Ft5fbkqNa76vnsjYNwjDZUXoTWpP7VYm3mtsaQckQADN \
+    --known-validator 9QxCLckBiJc783jnMvXZubK4wH86Eqqvashtrwvcsgkv \
+    --only-known-rpc \
+    --full-rpc-api \
+    --no-voting \
+    --ledger /mnt/ledger \
+    --accounts /mnt/accounts \
+    --log /home/sol/solana-rpc.log \
+    --rpc-port 8899 \
+    --rpc-bind-address 0.0.0.0 \
+    --private-rpc \
+    --dynamic-port-range 8000-8020 \
+    --entrypoint entrypoint.testnet.solana.com:8001 \
+    --entrypoint entrypoint2.testnet.solana.com:8001 \
+    --entrypoint entrypoint3.testnet.solana.com:8001 \
+    --expected-genesis-hash 4uhcVJyU9pJkvQyS88uRDiswHXSCkY3zQawwpjk2NsNY \
+    --wal-recovery-mode skip_any_corrupted_record \
+    --limit-ledger-size
+```
+
+### Key RPC flags explained
+
+<AccordionGroup>
+  <Accordion title="--full-rpc-api">
+    Enables all RPC operations on this node. Without this flag, some API methods are disabled.
+  </Accordion>
+  <Accordion title="--no-voting">
+    Prevents the node from participating in consensus. Omitting this flag when running a high-traffic RPC node will degrade the performance of both the RPC service and any consensus participation.
+  </Accordion>
+  <Accordion title="--rpc-port 8899">
+    Sets the JSON-RPC HTTP port. The WebSocket port is always `RPC_PORT + 1` (8900 by default).
+  </Accordion>
+  <Accordion title="--rpc-bind-address 0.0.0.0">
+    Binds the RPC listener to all network interfaces. Use a specific IP to restrict access.
+  </Accordion>
+  <Accordion title="--private-rpc">
+    Prevents the node from publishing its open RPC port in the `solana gossip` output, keeping your endpoint private.
+  </Accordion>
+  <Accordion title="--limit-ledger-size">
+    Caps the on-disk ledger size. RPC nodes typically do not need the full history — use this flag and integrate Bigtable for historical queries if needed.
+  </Accordion>
+</AccordionGroup>
+
+### Known validator identities (testnet examples)
+
+| Pubkey | Operator |
+|---|---|
+| `5D1fNXzvv5NjV1ysLjirC4WY92RNsVH18vjmcszZd8on` | Solana Labs |
+| `dDzy5SR3AXdYWVqbDEkVFdvSPCtS9ihF5kJkHCtXoFs` | MonkeDAO |
+| `Ft5fbkqNa76vnsjYNwjDZUXoTWpP7VYm3mtsaQckQADN` | Certus One |
+| `eoKpUABi59aT4rR9HGS3LcMecfut9x7zJyodWWP43YQ` | SerGo |
+| `9QxCLckBiJc783jnMvXZubK4wH86Eqqvashtrwvcsgkv` | Algo\|Stake |
+
+## Account indexing
+
+Some RPC methods — like `getProgramAccounts` and SPL-token queries — scan the entire accounts set and are slow by default as the number of accounts grows. You can enable in-memory indexes to accelerate them with the `--account-index` flag.
+
+<Tabs>
+  <Tab title="program-id index">
+    Indexes each account by its owning program. Used by `getProgramAccounts`.
+
+    ```bash
+    --account-index program-id
+    ```
+  </Tab>
+  <Tab title="spl-token-mint index">
+    Indexes each SPL token account by its token mint. Used by `getTokenAccountsByDelegate` and `getTokenLargestAccounts`.
+
+    ```bash
+    --account-index spl-token-mint
+    ```
+  </Tab>
+  <Tab title="spl-token-owner index">
+    Indexes each SPL token account by the token-owner address. Used by `getTokenAccountsByOwner` and filtered `getProgramAccounts` requests.
+
+    ```bash
+    --account-index spl-token-owner
+    ```
+  </Tab>
+  <Tab title="All indexes">
+    You can specify multiple indexes in a single command:
+
+    ```bash
+    --account-index program-id \
+    --account-index spl-token-mint \
+    --account-index spl-token-owner
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+  Enabling `--account-index` significantly increases RAM usage. Plan for at least 512 GB when using these indexes.
+</Warning>
+
+## Historical data with Bigtable
+
+The volume of transactions on Solana makes it impractical to store the full history locally. Use `--limit-ledger-size` to cap your local storage, and connect to a Bigtable instance for older block queries. See the [solana-labs/solana-bigtable](https://github.com/solana-labs/solana-bigtable) repository for setup instructions.
+
+## Other cluster examples
+
+For equivalent startup commands targeting devnet or mainnet-beta, see the [Clusters overview](/clusters/overview) page. You still need to customize those commands with the RPC-specific flags (`--no-voting`, `--full-rpc-api`, `--private-rpc`, etc.) described above.

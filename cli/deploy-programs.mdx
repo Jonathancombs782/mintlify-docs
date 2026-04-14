@@ -1,0 +1,208 @@
+---
+title: "Deploy On-Chain Programs to Solana"
+description: "Deploy, upgrade, inspect, and manage on-chain Solana programs using the solana program deploy command and related CLI subcommands."
+---
+
+Solana programs (sometimes called smart contracts) run on the Solana runtime and are stored in on-chain accounts. The Solana CLI provides a full set of commands for deploying and managing programs — from the initial upload through upgrades, authority changes, and cleanup. Before deploying, make sure you have the Solana CLI installed and your wallet configured.
+
+## Deploy a program
+
+Compile your program to produce a shared object file (`.so`), then deploy it:
+
+```bash
+solana program deploy <PROGRAM_FILEPATH>
+```
+
+On success, the CLI prints the program ID:
+
+```text
+Program Id: 3KS2k14CmtnuVv2fvYcvdrNgC94Y11WETBpMUGgXyWZL
+```
+
+This address is what transactions reference to invoke your program.
+
+If you want to deploy to a specific program address, pass a keypair file for that address:
+
+```bash
+solana program deploy --program-id <KEYPAIR_FILEPATH> <PROGRAM_FILEPATH>
+```
+
+If you omit `--program-id`, the CLI looks for a keypair file named `<PROGRAM_NAME>-keypair.json` in the same directory as the `.so` file. Build tools generate this file automatically:
+
+```text
+./path-to-program/program.so
+./path-to-program/program-keypair.json
+```
+
+## Inspect a deployed program
+
+View the details of any program account:
+
+```bash
+solana program show <ACCOUNT_ADDRESS>
+```
+
+```text
+Program Id: 3KS2k14CmtnuVv2fvYcvdrNgC94Y11WETBpMUGgXyWZL
+Owner: BPFLoaderUpgradeab1e11111111111111111111111
+ProgramData Address: EHsACWBhgmw8iq5dmUZzTA1esRqcTognhKNHUkPi4q4g
+Authority: FwoGJNUaJN2zfVEex9BB11Dqb3NJKy3e9oY3KTh9XzCU
+Last Deployed In Slot: 63890568
+Data Length: 5216 (0x1460) bytes
+```
+
+- **Program Id** — the address you pass to transactions
+- **Authority** — the account that can upgrade or close this program
+- **Last Deployed In Slot** — when the program was last updated
+
+## Redeploy (upgrade) a program
+
+Redeploy to the same address using the same command:
+
+```bash
+solana program deploy <PROGRAM_FILEPATH>
+```
+
+<Warning>
+  If the redeployed binary is larger than the original, the upgrade fails. Pre-allocate extra space with `--max-len`:
+
+  ```bash
+  solana program deploy --max-len 200000 <PROGRAM_FILEPATH>
+  ```
+</Warning>
+
+If the account is already too small and you cannot redeploy, extend it first:
+
+```bash
+solana program extend <PROGRAM_ID> <ADDITIONAL_BYTES>
+```
+
+## Recover from a failed deployment
+
+When a deployment fails partway through, a buffer account is left on-chain holding lamports. The error message includes a 12-word seed phrase you can use to recover the buffer's keypair:
+
+```bash
+solana-keygen recover -o recovered-buffer.json
+```
+
+Enter the seed phrase when prompted, then resume the deployment:
+
+```bash
+solana program deploy --buffer recovered-buffer.json <PROGRAM_FILEPATH>
+```
+
+## Manage upgrade authority
+
+The account specified as the upgrade authority is the only one that can redeploy or close the program. The default keypair is used as the authority unless you specify otherwise.
+
+Set a different authority at deploy time:
+
+```bash
+solana program deploy --upgrade-authority <UPGRADE_AUTHORITY_SIGNER> <PROGRAM_FILEPATH>
+```
+
+Change the authority after deployment:
+
+```bash
+solana program set-upgrade-authority <PROGRAM_ADDRESS> \
+    --upgrade-authority <UPGRADE_AUTHORITY_SIGNER> \
+    --new-upgrade-authority <NEW_UPGRADE_AUTHORITY>
+```
+
+## Make a program immutable
+
+To permanently prevent further upgrades, mark the program as immutable:
+
+```bash
+solana program deploy <PROGRAM_FILEPATH> --final
+```
+
+Or after deployment:
+
+```bash
+solana program set-upgrade-authority <PROGRAM_ADDRESS> --final
+```
+
+<Warning>
+  Marking a program immutable is irreversible. You will never be able to update or close it again.
+</Warning>
+
+## Close programs and reclaim lamports
+
+To close a program account and send its lamports to a recipient:
+
+```bash
+solana program close <ADDRESS>
+```
+
+List all open programs or buffer accounts under your authority:
+
+```bash
+solana program show --programs
+solana program show --buffers
+```
+
+Close all buffer accounts at once:
+
+```bash
+solana program close --buffers
+```
+
+## Use an intermediary buffer account
+
+For workflows that require multiple parties to verify a program before it goes live (such as multisig governance), write the program to a buffer first:
+
+```bash
+solana program write-buffer <PROGRAM_FILEPATH>
+```
+
+Transfer buffer authority to the governing account:
+
+```bash
+solana program set-buffer-authority <BUFFER_ADDRESS> --new-buffer-authority <NEW_BUFFER_AUTHORITY>
+```
+
+Deploy from the buffer once approved:
+
+```bash
+solana program deploy --program-id <PROGRAM_ADDRESS> --buffer <BUFFER_ADDRESS>
+```
+
+## Offline upgrade workflow
+
+Some security models use an air-gapped machine as the upgrade authority. See [Sign Solana Transactions Offline](/cli/offline-signing) for the general offline signing pattern. The offline upgrade process follows this sequence:
+
+<Steps>
+  <Step title="Write the new program to a buffer (online)">
+    ```bash
+    solana program write-buffer <PROGRAM_FILEPATH>
+    ```
+  </Step>
+  <Step title="Transfer buffer authority to the offline signer (online)">
+    ```bash
+    solana program set-buffer-authority <BUFFER_PUBKEY> --new-buffer-authority <OFFLINE_SIGNER_PUBKEY>
+    ```
+  </Step>
+  <Step title="Sign the upgrade transaction (offline)">
+    ```bash
+    solana program upgrade <BUFFER_PUBKEY> <PROGRAM_ID> \
+        --sign-only \
+        --fee-payer <ONLINE_SIGNER_PUBKEY> \
+        --upgrade-authority <OFFLINE_SIGNER> \
+        --blockhash <VALUE>
+    ```
+  </Step>
+  <Step title="Broadcast the upgrade transaction (online)">
+    ```bash
+    solana program upgrade <BUFFER_PUBKEY> <PROGRAM_ID> \
+        --fee-payer <ONLINE_SIGNER> \
+        --upgrade-authority <OFFLINE_SIGNER_PUBKEY> \
+        --blockhash <VALUE> \
+        --signer <OFFLINE_SIGNER_PUBKEY>:<OFFLINE_SIGNER_SIGNATURE>
+    ```
+  </Step>
+</Steps>
+
+<Note>
+  The `--blockhash` used in the offline and online commands must match and must not be expired (~60 seconds). If it expires before you broadcast, obtain a fresh blockhash and sign again, or use a [durable nonce](/cli/durable-nonce) to remove the time constraint.
+</Note>

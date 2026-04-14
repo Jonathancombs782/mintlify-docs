@@ -1,0 +1,165 @@
+---
+title: "Solana WebSocket Subscriptions Overview"
+description: "Learn how to open a WebSocket connection to Solana, subscribe to on-chain events, handle notification messages, and unsubscribe cleanly."
+---
+
+Solana's WebSocket API lets you receive real-time notifications whenever on-chain state changes, rather than polling the HTTP RPC repeatedly. You open a persistent connection to the cluster's WebSocket endpoint, send a subscribe message, and the node pushes notifications to you whenever the subscribed condition is met.
+
+## Connecting to the WebSocket endpoint
+
+Each cluster exposes a WebSocket endpoint at the same host as its HTTP endpoint, using the `wss://` scheme:
+
+| Cluster | WebSocket endpoint |
+|---|---|
+| Devnet | `wss://api.devnet.solana.com` |
+| Testnet | `wss://api.testnet.solana.com` |
+| Mainnet Beta | `wss://api.mainnet-beta.solana.com` |
+
+Open a connection with any standards-compliant WebSocket client. In a browser or Node.js environment you can use the built-in `WebSocket` class:
+
+```javascript
+const ws = new WebSocket("wss://api.devnet.solana.com");
+
+ws.addEventListener("open", () => {
+  console.log("Connected to Solana WebSocket");
+});
+
+ws.addEventListener("message", (event) => {
+  const message = JSON.parse(event.data);
+  console.log("Received:", message);
+});
+
+ws.addEventListener("close", () => {
+  console.log("Connection closed");
+});
+```
+
+<Note>
+WebSocket connections are subject to the same rate limits as the HTTP endpoints. Use dedicated RPC providers for production workloads that require high-frequency subscriptions.
+</Note>
+
+## Subscribe and unsubscribe pattern
+
+Every subscription follows the same two-step pattern:
+
+1. **Subscribe** — send a JSON-RPC request with the subscribe method name. The server responds with a numeric `subscriptionId`.
+2. **Unsubscribe** — send a JSON-RPC request with the corresponding unsubscribe method and the `subscriptionId`. The server responds with `true` on success.
+
+### Subscribe request
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "accountSubscribe",
+  "params": [
+    "83astBRguLMdt2h5U1Tpdq5tjFoJ6noeGwaY3mDLVcri",
+    { "encoding": "base64", "commitment": "confirmed" }
+  ]
+}
+```
+
+### Subscribe response
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": 23784
+}
+```
+
+The `result` value `23784` is your `subscriptionId`. Store it — you need it to unsubscribe.
+
+### Unsubscribe request
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "accountUnsubscribe",
+  "params": [23784]
+}
+```
+
+### Unsubscribe response
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": true
+}
+```
+
+## Notification format
+
+Notifications arrive as JSON-RPC messages with the method name set to the notification type (for example, `accountNotification`). The `params` object contains the `subscription` id and a `result` with the updated value:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "accountNotification",
+  "params": {
+    "subscription": 23784,
+    "result": {
+      "context": { "slot": 278066200 },
+      "value": {
+        "lamports": 999995000,
+        "data": ["", "base64"],
+        "owner": "11111111111111111111111111111111",
+        "executable": false,
+        "rentEpoch": 361
+      }
+    }
+  }
+}
+```
+
+## Available subscriptions
+
+| Subscribe method | Unsubscribe method | Notification method | Description |
+|---|---|---|---|
+| [`accountSubscribe`](/rpc/account-subscribe) | `accountUnsubscribe` | `accountNotification` | Fires whenever the data or lamports in an account change. |
+| [`logsSubscribe`](/rpc/logs-subscribe) | `logsUnsubscribe` | `logsNotification` | Fires with transaction logs for transactions matching a filter. |
+| [`programSubscribe`](/rpc/program-subscribe) | `programUnsubscribe` | `programNotification` | Fires whenever any account owned by a program changes. |
+| [`slotSubscribe`](/rpc/slot-subscribe) | `slotUnsubscribe` | `slotNotification` | Fires each time the node processes a new slot. |
+| `signatureSubscribe` | `signatureUnsubscribe` | `signatureNotification` | Fires once when a transaction signature reaches a given commitment. |
+| `slotsUpdatesSubscribe` | `slotsUpdatesUnsubscribe` | `slotsUpdatesNotification` | Fires detailed slot lifecycle events including creation, freezing, and rooting. |
+| `blockSubscribe` | `blockUnsubscribe` | `blockNotification` | Fires with full block data when a block matching the filter is confirmed. |
+| `voteSubscribe` | `voteUnsubscribe` | `voteNotification` | Fires when a vote transaction is observed in gossip. Unstable API. |
+
+<Warning>
+`voteSubscribe` is marked unstable and the notification format may change without notice. Avoid using it in production.
+</Warning>
+
+## Handling reconnections
+
+WebSocket connections can drop due to network interruptions or server-side timeouts. Your client should implement reconnection logic that re-sends all active subscribe requests after reconnecting:
+
+```javascript
+function subscribe(ws, subscribeRequest) {
+  ws.send(JSON.stringify(subscribeRequest));
+}
+
+function connect(url, subscriptions) {
+  const ws = new WebSocket(url);
+
+  ws.addEventListener("open", () => {
+    for (const req of subscriptions) {
+      subscribe(ws, req);
+    }
+  });
+
+  ws.addEventListener("close", () => {
+    // Reconnect after a short delay
+    setTimeout(() => connect(url, subscriptions), 2000);
+  });
+
+  return ws;
+}
+```
+
+<Tip>
+Use the `@solana/web3.js` library's `Connection` class if you want built-in WebSocket subscription management, automatic reconnection, and typed notification handlers.
+</Tip>

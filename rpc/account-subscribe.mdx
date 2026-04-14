@@ -1,0 +1,208 @@
+---
+title: "accountSubscribe WebSocket Method"
+description: "Subscribe to real-time notifications whenever the lamports or data of a specific on-chain account changes, and unsubscribe with accountUnsubscribe."
+---
+
+The `accountSubscribe` method opens a push subscription that fires a notification every time the target account's state changes — whether its lamport balance is updated, its data is modified, or the account is created or closed. This is the most direct way to watch a specific wallet or program account without polling `getAccountInfo` in a loop.
+
+## Connecting
+
+Connect to the WebSocket endpoint for your chosen cluster before sending any subscribe request:
+
+```javascript
+const ws = new WebSocket("wss://api.devnet.solana.com");
+```
+
+See [WebSocket Subscriptions Overview](/rpc/websocket-subscriptions) for full connection details and the general subscribe/unsubscribe pattern.
+
+## accountSubscribe
+
+### Parameters
+
+<ParamField path="params[0]" type="string" required>
+  The public key of the account to watch, as a base-58 encoded string.
+</ParamField>
+
+<ParamField path="params[1]" type="object">
+  Optional configuration object.
+
+  <Expandable title="config fields">
+    <ParamField path="encoding" type="string" default="base64">
+      Encoding for the account data in notifications. Accepted values: `base58`, `base64`, `base64+zstd`, `jsonParsed`.
+    </ParamField>
+
+    <ParamField path="commitment" type="string" default="finalized">
+      Commitment level at which to trigger notifications. One of `processed`, `confirmed`, or `finalized`.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Subscribe request
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "accountSubscribe",
+  "params": [
+    "83astBRguLMdt2h5U1Tpdq5tjFoJ6noeGwaY3mDLVcri",
+    { "encoding": "base64", "commitment": "confirmed" }
+  ]
+}
+```
+
+### Subscribe response
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": 23784
+}
+```
+
+The `result` is the `subscriptionId`. Store it for later use with `accountUnsubscribe`.
+
+## Notification format
+
+When the account changes, the node sends an `accountNotification` message:
+
+<ResponseField name="method" type="string">
+  Always `"accountNotification"`.
+</ResponseField>
+
+<ResponseField name="params.subscription" type="number">
+  The subscription ID this notification belongs to.
+</ResponseField>
+
+<ResponseField name="params.result" type="object">
+  <Expandable title="result fields">
+    <ResponseField name="context.slot" type="number">
+      The slot at which the change was observed.
+    </ResponseField>
+    <ResponseField name="value.lamports" type="number">
+      Updated lamport balance.
+    </ResponseField>
+    <ResponseField name="value.owner" type="string">
+      Base-58 encoded public key of the program that owns this account.
+    </ResponseField>
+    <ResponseField name="value.data" type="array | object">
+      Account data in the requested encoding. For `base64` this is a two-element array `[data, "base64"]`.
+    </ResponseField>
+    <ResponseField name="value.executable" type="boolean">
+      Whether the account contains an executable program.
+    </ResponseField>
+    <ResponseField name="value.rentEpoch" type="number">
+      Epoch at which rent will next be collected.
+    </ResponseField>
+    <ResponseField name="value.space" type="number">
+      Size of the account's data in bytes.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Notification example
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "accountNotification",
+  "params": {
+    "subscription": 23784,
+    "result": {
+      "context": { "slot": 278066200 },
+      "value": {
+        "lamports": 999995000,
+        "owner": "11111111111111111111111111111111",
+        "data": ["", "base64"],
+        "executable": false,
+        "rentEpoch": 361,
+        "space": 0
+      }
+    }
+  }
+}
+```
+
+## accountUnsubscribe
+
+Send `accountUnsubscribe` with the subscription ID to stop receiving notifications.
+
+### Unsubscribe request
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "accountUnsubscribe",
+  "params": [23784]
+}
+```
+
+### Unsubscribe response
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": true
+}
+```
+
+## Full JavaScript example
+
+```javascript
+const ws = new WebSocket("wss://api.devnet.solana.com");
+let subscriptionId = null;
+
+ws.addEventListener("open", () => {
+  // Subscribe to account changes
+  ws.send(JSON.stringify({
+    jsonrpc: "2.0",
+    id: 1,
+    method: "accountSubscribe",
+    params: [
+      "83astBRguLMdt2h5U1Tpdq5tjFoJ6noeGwaY3mDLVcri",
+      { encoding: "base64", commitment: "confirmed" },
+    ],
+  }));
+});
+
+ws.addEventListener("message", (event) => {
+  const message = JSON.parse(event.data);
+
+  // Capture the subscription ID from the subscribe response
+  if (message.id === 1 && message.result !== undefined) {
+    subscriptionId = message.result;
+    console.log("Subscribed with ID:", subscriptionId);
+    return;
+  }
+
+  // Handle account change notifications
+  if (message.method === "accountNotification") {
+    const { slot } = message.params.result.context;
+    const { lamports } = message.params.result.value;
+    console.log(`Slot ${slot}: balance = ${lamports / 1e9} SOL`);
+
+    // Unsubscribe after the first notification
+    if (subscriptionId !== null) {
+      ws.send(JSON.stringify({
+        jsonrpc: "2.0",
+        id: 2,
+        method: "accountUnsubscribe",
+        params: [subscriptionId],
+      }));
+    }
+  }
+
+  // Confirm unsubscribe
+  if (message.id === 2 && message.result === true) {
+    console.log("Unsubscribed successfully");
+    ws.close();
+  }
+});
+```
+
+<Note>
+`accountSubscribe` fires for every commitment level at which the change is observed. If you subscribe with `commitment: "processed"` you may receive multiple notifications for the same change as it progresses from `processed` to `confirmed` to `finalized`. Use `commitment: "confirmed"` or `"finalized"` to receive one notification per change.
+</Note>

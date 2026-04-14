@@ -1,0 +1,128 @@
+{
+  "projectType": "infrastructure",
+  "projectName": "Solana",
+  "projectDescription": "A high-performance, permissionless blockchain network for building fast, secure, and scalable decentralized applications and marketplaces.",
+  "theme": "aspen",
+  "primaryColor": "#d04290",
+  "lightColor": "#6c1588",
+  "darkColor": "#949c9c",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "cli/installation",
+              "cli/wallets",
+              "clusters/overview"
+            ]
+          },
+          {
+            "group": "CLI Usage",
+            "pages": [
+              "cli/configuration",
+              "cli/transfer-tokens",
+              "cli/staking",
+              "cli/deploy-programs",
+              "cli/offline-signing",
+              "cli/durable-nonce"
+            ]
+          },
+          {
+            "group": "Validator Operations",
+            "pages": [
+              "validators/overview",
+              "validators/requirements",
+              "validators/setup",
+              "validators/rpc-node",
+              "validators/best-practices"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/accounts",
+              "concepts/transactions",
+              "concepts/programs",
+              "concepts/clusters",
+              "concepts/staking"
+            ]
+          },
+          {
+            "group": "Plugins & Integrations",
+            "pages": [
+              "plugins/geyser-overview",
+              "plugins/geyser-interface"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "reference/faq",
+              "reference/backwards-compatibility"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "RPC API",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "rpc/introduction",
+              "rpc/http-methods",
+              "rpc/websocket-subscriptions"
+            ]
+          },
+          {
+            "group": "HTTP Methods",
+            "pages": [
+              "rpc/get-account-info",
+              "rpc/get-balance",
+              "rpc/get-block",
+              "rpc/get-transaction",
+              "rpc/send-transaction",
+              "rpc/simulate-transaction"
+            ]
+          },
+          {
+            "group": "WebSocket",
+            "pages": [
+              "rpc/account-subscribe",
+              "rpc/logs-subscribe",
+              "rpc/program-subscribe",
+              "rpc/slot-subscribe"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "High-performance blockchain with sub-second finality",
+    "Proof of History (PoH) consensus mechanism",
+    "Permissionless validator network with staking",
+    "JSON RPC API for querying blockchain state",
+    "WebSocket subscriptions for real-time updates",
+    "Geyser plugin system for external data streaming",
+    "Solana CLI for wallet management, staking, and program deployment",
+    "Multiple clusters: Devnet, Testnet, and Mainnet Beta",
+    "Native support for SPL tokens and smart programs",
+    "Cross-program invocations and composable on-chain programs"
+  ],
+  "publicApiSurface": [
+    "solana CLI — wallet, transfer, stake, program deploy commands",
+    "solana-validator — validator node process",
+    "solana-keygen — keypair generation tool",
+    "JSON RPC: getAccountInfo, getBalance, getBlock, getTransaction, sendTransaction, simulateTransaction",
+    "JSON RPC: getProgramAccounts, getSlot, getEpochInfo, getVoteAccounts",
+    "WebSocket: accountSubscribe, logsSubscribe, programSubscribe, slotSubscribe, signatureSubscribe",
+    "GeyserPlugin trait — on_load, update_account, update_slot_status, notify_transaction, notify_block_metadata",
+    "solana-sdk Rust crate — Keypair, Transaction, Message, Instruction, Pubkey",
+    "RPC endpoints: https://api.devnet.solana.com, https://api.testnet.solana.com, https://api.mainnet-beta.solana.com"
+  ]
+}

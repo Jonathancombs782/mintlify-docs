@@ -1,0 +1,157 @@
+---
+title: "sendTransaction RPC Method"
+description: "sendTransaction submits a signed transaction to the Solana cluster. Supports base64/base58 encoding, preflight checks, and configurable retry behavior."
+---
+
+The `sendTransaction` method submits a signed transaction to the cluster. The node validates the transaction, optionally runs a preflight simulation to catch obvious errors, and forwards it to the leader. The method returns the transaction's first signature (its transaction ID) as a base-58 string. A successful return value does not mean the transaction has been confirmed — it only means the node accepted and forwarded it.
+
+## Parameters
+
+<ParamField path="params[0]" type="string" required>
+  The fully signed transaction, serialized and encoded. The encoding must match the `encoding` config field (default `base64`).
+</ParamField>
+
+<ParamField path="params[1]" type="object">
+  Optional configuration object.
+
+  <Expandable title="config fields">
+    <ParamField path="skipPreflight" type="boolean" default="false">
+      When `true`, skip the preflight simulation check. Useful when you have already simulated the transaction and want to reduce latency. When `false`, the node simulates the transaction before forwarding it and returns an error if simulation fails.
+    </ParamField>
+
+    <ParamField path="preflightCommitment" type="string" default="finalized">
+      Commitment level used for the preflight simulation. Using `confirmed` or `processed` gives a faster response but may simulate against a slightly stale state.
+    </ParamField>
+
+    <ParamField path="encoding" type="string" default="base64">
+      Encoding of the serialized transaction. Accepted values: `base64` or `base58`. `base58` is deprecated and slow; prefer `base64`.
+    </ParamField>
+
+    <ParamField path="maxRetries" type="number">
+      Maximum number of times the node should retry sending the transaction to the leader. When omitted, the node retries until the transaction is finalized or the blockhash expires.
+    </ParamField>
+
+    <ParamField path="minContextSlot" type="number">
+      Minimum slot at which to perform preflight checks.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## Response
+
+<ResponseField name="result" type="string" required>
+  The transaction signature as a base-58 encoded string. This is the transaction ID you use to look up the transaction later with [`getTransaction`](/rpc/get-transaction) or track confirmation with `getSignatureStatuses`.
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+
+```bash cURL
+curl https://api.devnet.solana.com \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "sendTransaction",
+    "params": [
+      "4hXTCkRzt9WyecNzV1XPgCDfGAZzQKNxLXgynz5QDuWWPSAZBZSHptvWRL3BjCvzUXRdKvHL2b7yGrRQcWyaqsZEqogg28fVowMBAD5cgArm3Nmnn2...",
+      {
+        "skipPreflight": false,
+        "preflightCommitment": "confirmed",
+        "encoding": "base64",
+        "maxRetries": 3
+      }
+    ]
+  }'
+```
+
+```javascript JavaScript
+import { Connection, Transaction, sendAndConfirmTransaction } from "@solana/web3.js";
+
+// Low-level sendTransaction call
+const connection = new Connection("https://api.devnet.solana.com", "confirmed");
+
+// Serialize and encode your signed transaction first
+const serializedTx = transaction.serialize();
+const base64Tx = Buffer.from(serializedTx).toString("base64");
+
+const response = await fetch("https://api.devnet.solana.com", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    jsonrpc: "2.0",
+    id: 1,
+    method: "sendTransaction",
+    params: [
+      base64Tx,
+      {
+        skipPreflight: false,
+        preflightCommitment: "confirmed",
+        encoding: "base64",
+      },
+    ],
+  }),
+});
+
+const { result, error } = await response.json();
+if (error) {
+  console.error("Failed to send:", error.message);
+} else {
+  console.log("Transaction signature:", result);
+}
+```
+
+</CodeGroup>
+
+### Success response
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": "2id3YC2jK9G5Wo2phDx4gJVAew8DcY5NAojnVuao8rkxwPYPe8cSwE5GzhEgJA2y8fVjDEo6iR6ykBvDxrTQrtpb"
+}
+```
+
+## Error handling
+
+When preflight simulation fails, the error response contains a `data` object with simulation results:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "error": {
+    "code": -32002,
+    "message": "Transaction simulation failed: Error processing Instruction 0: custom program error: 0x1",
+    "data": {
+      "accounts": null,
+      "err": { "InstructionError": [0, { "Custom": 1 }] },
+      "logs": [
+        "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1qSsg invoke [1]",
+        "Program log: Error: InvalidAccountData",
+        "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1qSsg failed: custom program error: 0x1"
+      ],
+      "unitsConsumed": 3012
+    }
+  }
+}
+```
+
+Common error scenarios:
+
+| Error code | Cause |
+|---|---|
+| `-32002` | Preflight simulation failed. Check the `data.logs` for details. |
+| `-32003` | Transaction rejected: the blockhash has expired. Fetch a new blockhash and retry. |
+| `-32004` | Node unhealthy. Try a different endpoint. |
+
+<Warning>
+A successful `sendTransaction` response only confirms that the node accepted the transaction. Always poll `getSignatureStatuses` or use `confirmTransaction` in `@solana/web3.js` to verify that the transaction reached the commitment level you need before treating it as complete.
+</Warning>
+
+<Tip>
+Use `skipPreflight: true` only if you have already called [`simulateTransaction`](/rpc/simulate-transaction) and confirmed the transaction will succeed. Skipping preflight on an invalid transaction wastes a write to the cluster.
+</Tip>

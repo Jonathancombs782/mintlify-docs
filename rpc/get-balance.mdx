@@ -1,0 +1,120 @@
+---
+title: "getBalance RPC Method"
+description: "Returns the lamport balance of the account at a given public key, with an optional commitment level to control how finalized the result must be."
+---
+
+The `getBalance` method returns the lamport balance of any on-chain account. This is the fastest way to check how much SOL an address holds. The response is a context-wrapped `u64` value representing the number of lamports (1 SOL = 1,000,000,000 lamports). If no account exists at the address, the balance is `0`.
+
+## Parameters
+
+<ParamField path="params[0]" type="string" required>
+  The public key of the account to query, as a base-58 encoded string.
+</ParamField>
+
+<ParamField path="params[1]" type="object">
+  Optional configuration object.
+
+  <Expandable title="config fields">
+    <ParamField path="commitment" type="string" default="finalized">
+      Commitment level for the query. One of `processed`, `confirmed`, or `finalized`.
+    </ParamField>
+
+    <ParamField path="minContextSlot" type="number">
+      Minimum slot at which the request may be evaluated.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## Response
+
+<ResponseField name="context" type="object">
+  <Expandable title="context fields">
+    <ResponseField name="slot" type="number">
+      The slot at which this response was generated.
+    </ResponseField>
+    <ResponseField name="apiVersion" type="string">
+      The node's software version.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="value" type="number" required>
+  The account balance in lamports as a `u64` integer. Returns `0` if the account does not exist.
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+
+```bash cURL
+curl https://api.devnet.solana.com \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "getBalance",
+    "params": [
+      "83astBRguLMdt2h5U1Tpdq5tjFoJ6noeGwaY3mDLVcri"
+    ]
+  }'
+```
+
+```bash cURL with commitment
+curl https://api.devnet.solana.com \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "getBalance",
+    "params": [
+      "83astBRguLMdt2h5U1Tpdq5tjFoJ6noeGwaY3mDLVcri",
+      { "commitment": "confirmed" }
+    ]
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch("https://api.devnet.solana.com", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    jsonrpc: "2.0",
+    id: 1,
+    method: "getBalance",
+    params: [
+      "83astBRguLMdt2h5U1Tpdq5tjFoJ6noeGwaY3mDLVcri",
+      { commitment: "confirmed" },
+    ],
+  }),
+});
+
+const { result } = await response.json();
+const sol = result.value / 1_000_000_000;
+console.log(`Balance: ${sol} SOL`);
+```
+
+</CodeGroup>
+
+### Response example
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "context": {
+      "slot": 278066127,
+      "apiVersion": "1.18.0"
+    },
+    "value": 500000000
+  }
+}
+```
+
+The `value` of `500000000` lamports equals 0.5 SOL.
+
+<Note>
+Lamport arithmetic uses integer math. To convert to SOL in JavaScript use `value / 1e9` or, for exact decimal handling, the `LAMPORTS_PER_SOL` constant from `@solana/web3.js`.
+</Note>

@@ -1,0 +1,92 @@
+---
+title: "Solana RPC HTTP Methods Reference"
+description: "A complete index of all Solana JSON-RPC HTTP methods, grouped by category, with links to detailed reference pages for key methods."
+---
+
+Solana exposes its full node state through a set of JSON-RPC 2.0 HTTP methods. You call each method by sending a POST request to any cluster endpoint with the method name and parameters in the request body. This page lists all available methods grouped by category so you can find what you need quickly.
+
+<Note>
+All requests require `Content-Type: application/json` and use the JSON-RPC 2.0 envelope. See [Solana JSON RPC API Overview](/rpc/introduction) for request format details and cluster endpoints.
+</Note>
+
+## Account methods
+
+These methods read and inspect on-chain account state.
+
+| Method | Description |
+|---|---|
+| [`getAccountInfo`](/rpc/get-account-info) | Returns all data stored in an account, including lamports, owner program, and raw data. |
+| [`getBalance`](/rpc/get-balance) | Returns the lamport balance of a given account. |
+| `getMultipleAccounts` | Returns account data for a list of up to 100 public keys in a single call. |
+| `getProgramAccounts` | Returns all accounts owned by a given program. Supports `memcmp` and `dataSize` filters. |
+| `getLargestAccounts` | Returns the 20 non-circulating accounts with the highest lamport balances. |
+| `getTokenAccountBalance` | Returns the token balance of an SPL Token account. |
+| `getTokenAccountsByDelegate` | Returns all SPL Token accounts where the given address is the approved delegate. |
+| `getTokenAccountsByOwner` | Returns all SPL Token accounts owned by a given wallet. |
+| `getTokenLargestAccounts` | Returns the 20 largest token accounts for a given mint. |
+| `getTokenSupply` | Returns the total supply of an SPL Token mint. |
+| `getStakeActivation` | Returns the activation state of a stake account. |
+
+## Block and ledger methods
+
+These methods query block data, slot information, and ledger history.
+
+| Method | Description |
+|---|---|
+| [`getBlock`](/rpc/get-block) | Returns a confirmed block with full transaction and metadata details. |
+| `getBlockHeight` | Returns the current block height of the node. |
+| `getBlockProduction` | Returns block production information for the current or a given epoch. |
+| `getBlockTime` | Returns the estimated production time of a confirmed block as a Unix timestamp. |
+| `getBlocks` | Returns a list of confirmed block slots between two slot boundaries. |
+| `getBlocksWithLimit` | Returns a list of confirmed blocks starting from a given slot, up to a limit. |
+| `getFirstAvailableBlock` | Returns the lowest slot with a block still available in the node's ledger. |
+| `getGenesisHash` | Returns the genesis hash of the cluster. |
+| `minimumLedgerSlot` | Returns the lowest slot that the node has ledger data for. |
+
+## Transaction methods
+
+These methods submit, simulate, and retrieve transaction data.
+
+| Method | Description |
+|---|---|
+| [`sendTransaction`](/rpc/send-transaction) | Submits a signed, serialized transaction to the cluster. |
+| [`simulateTransaction`](/rpc/simulate-transaction) | Simulates a transaction without broadcasting it. Returns logs and compute units consumed. |
+| [`getTransaction`](/rpc/get-transaction) | Returns confirmed transaction details for a given base-58 signature. |
+| `getSignatureStatuses` | Returns the status of up to 256 transaction signatures. |
+| `getSignaturesForAddress` | Returns up to 1,000 confirmed transaction signatures involving a given address. |
+| `getFeeForMessage` | Returns the fee in lamports for a given message. |
+| `isBlockhashValid` | Returns whether a blockhash is still valid (has not expired). |
+| `getLatestBlockhash` | Returns the most recent blockhash and the last block height at which it is valid. |
+
+## Validator and cluster info methods
+
+These methods return information about the cluster's current state and validator set.
+
+| Method | Description |
+|---|---|
+| `getClusterNodes` | Returns contact information for all nodes in the cluster gossip network. |
+| `getEpochInfo` | Returns information about the current epoch including slot index and transaction count. |
+| `getEpochSchedule` | Returns the epoch schedule configuration for the cluster. |
+| `getHealth` | Returns the health status of the node. Returns `"ok"` when healthy. |
+| `getIdentity` | Returns the public key of the current node. |
+| `getInflationGovernor` | Returns the current inflation schedule parameters. |
+| `getInflationRate` | Returns the specific inflation values for the current epoch. |
+| `getInflationReward` | Returns inflation rewards earned by a list of addresses during a given epoch. |
+| `getLeaderSchedule` | Returns the leader schedule for the current or a given epoch. |
+| `getMaxRetransmitSlot` | Returns the highest slot seen from retransmit stage. |
+| `getMaxShredInsertSlot` | Returns the highest slot seen after inserting a shred into the shred store. |
+| `getMinimumBalanceForRentExemption` | Returns the minimum lamport balance required to make an account rent-exempt for a given data size. |
+| `getRecentPerformanceSamples` | Returns recent performance samples covering transaction throughput. |
+| `getRecentPrioritizationFees` | Returns recent prioritization fee samples used to estimate compute unit prices. |
+| `getSlot` | Returns the slot the node is currently processing. |
+| `getSlotLeader` | Returns the current slot leader's public key. |
+| `getSlotLeaders` | Returns slot leaders for a given slot range. |
+| `getSupply` | Returns information about the current supply of SOL. |
+| `getTransactionCount` | Returns the total number of transactions processed. |
+| `getVersion` | Returns the current Solana software version of the node. |
+| `getVoteAccounts` | Returns the account info and stake for all voting accounts in the current bank. |
+| `requestAirdrop` | Requests an airdrop of lamports to a public key. Only available on Devnet and Testnet. |
+
+<Tip>
+Most validator info methods do not require parameters beyond an optional `commitment` config. They are useful for monitoring dashboards and health checks.
+</Tip>

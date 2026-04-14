@@ -1,0 +1,170 @@
+---
+title: "slotSubscribe WebSocket Method"
+description: "Subscribe to a real-time stream of slot progress notifications reporting the current slot, its parent, and the latest root as the chain advances."
+---
+
+The `slotSubscribe` method opens a subscription that fires a notification every time the validator processes a new slot. Each notification reports three slot values: the slot just processed, its parent slot, and the current root (the highest slot that has been finalized by a supermajority). This subscription is useful for building real-time slot clocks, progress indicators, and latency monitors.
+
+## Connecting
+
+Connect to the WebSocket endpoint before subscribing:
+
+```javascript
+const ws = new WebSocket("wss://api.devnet.solana.com");
+```
+
+See [WebSocket Subscriptions Overview](/rpc/websocket-subscriptions) for connection details.
+
+## slotSubscribe
+
+### Parameters
+
+`slotSubscribe` takes no parameters.
+
+### Subscribe request
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "slotSubscribe",
+  "params": []
+}
+```
+
+### Subscribe response
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": 0
+}
+```
+
+The `result` is the `subscriptionId`. Store it to unsubscribe later.
+
+## Notification format
+
+<ResponseField name="method" type="string">
+  Always `"slotNotification"`.
+</ResponseField>
+
+<ResponseField name="params.subscription" type="number">
+  The subscription ID.
+</ResponseField>
+
+<ResponseField name="params.result" type="object">
+  Slot progress information.
+
+  <Expandable title="result fields">
+    <ResponseField name="slot" type="number">
+      The slot number just processed by the node.
+    </ResponseField>
+    <ResponseField name="parent" type="number">
+      The parent slot of the current slot.
+    </ResponseField>
+    <ResponseField name="root" type="number">
+      The highest slot that has been rooted (finalized by a supermajority). Slots at or below this number will never be rolled back.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Notification example
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "slotNotification",
+  "params": {
+    "subscription": 0,
+    "result": {
+      "parent": 75,
+      "root": 44,
+      "slot": 76
+    }
+  }
+}
+```
+
+## slotUnsubscribe
+
+### Unsubscribe request
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "slotUnsubscribe",
+  "params": [0]
+}
+```
+
+### Unsubscribe response
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": true
+}
+```
+
+## Full JavaScript example
+
+```javascript
+const ws = new WebSocket("wss://api.devnet.solana.com");
+let subscriptionId = null;
+
+ws.addEventListener("open", () => {
+  ws.send(JSON.stringify({
+    jsonrpc: "2.0",
+    id: 1,
+    method: "slotSubscribe",
+    params: [],
+  }));
+});
+
+ws.addEventListener("message", (event) => {
+  const message = JSON.parse(event.data);
+
+  // Capture subscription ID
+  if (message.id === 1 && message.result !== undefined) {
+    subscriptionId = message.result;
+    console.log("Slot subscription ID:", subscriptionId);
+    return;
+  }
+
+  // Handle slot notifications
+  if (message.method === "slotNotification") {
+    const { slot, parent, root } = message.params.result;
+    console.log(`Slot: ${slot} | Parent: ${parent} | Root: ${root}`);
+  }
+
+  // Handle unsubscribe confirmation
+  if (message.id === 2 && message.result === true) {
+    console.log("Unsubscribed from slot notifications");
+    ws.close();
+  }
+});
+
+// Stop after 30 seconds
+setTimeout(() => {
+  if (subscriptionId !== null) {
+    ws.send(JSON.stringify({
+      jsonrpc: "2.0",
+      id: 2,
+      method: "slotUnsubscribe",
+      params: [subscriptionId],
+    }));
+  }
+}, 30_000);
+```
+
+<Note>
+Solana targets approximately 400ms per slot, so `slotNotification` messages arrive roughly 2-3 times per second on a healthy cluster. Expect bursts during high network activity and gaps during skipped slots.
+</Note>
+
+<Tip>
+Use the `root` field to determine the most recently finalized slot without making additional HTTP calls to `getSlot` or `getBlockHeight`. Any slot at or below `root` is permanently confirmed.
+</Tip>

@@ -1,0 +1,128 @@
+---
+title: "On-Chain Programs: Solana's Smart Contracts"
+description: "Solana smart contracts are called programs. Learn native vs. BPF programs, program-derived addresses, cross-program invocations, and compute budgets."
+---
+
+On Solana, smart contracts are called **programs**. A program is an account with its `executable` flag set to `true` and its `data` field containing compiled bytecode. When a transaction instruction targets a program's public key, the Solana runtime loads and executes that bytecode, passing in the accounts and instruction data specified by the instruction. Programs are stateless — they read from and write to separate accounts rather than storing state internally.
+
+## Native programs vs. BPF/SBF programs
+
+Solana has two categories of programs:
+
+<AccordionGroup>
+  <Accordion title="Native programs">
+    Native programs are built into the validator software itself. They are not stored as on-chain bytecode — instead, they are part of the validator implementation and can only be updated through cluster-wide software upgrades. Because they run natively rather than in a sandboxed VM, they are extremely fast.
+
+    Native programs have stable program IDs and well-defined instruction sets. Interface changes are handled by adding new instructions rather than modifying existing ones, so existing clients continue to work across validator upgrades.
+  </Accordion>
+  <Accordion title="BPF/SBF programs">
+    User-deployed programs are compiled to **BPF (Berkeley Packet Filter)** bytecode — or more precisely, **SBF (Solana Bytecode Format)**, Solana's dialect of BPF. These programs run inside a sandboxed VM that enforces compute unit limits and account access controls.
+
+    You write SBF programs in Rust (most common), C, or C++, and compile them using the Solana toolchain. Deployed programs are owned by a BPF Loader program, which is responsible for loading and executing them.
+  </Accordion>
+</AccordionGroup>
+
+## Key native programs
+
+The following native programs are essential to understand as a developer:
+
+<CardGroup cols={2}>
+  <Card title="System Program" icon="gear">
+    **ID:** `11111111111111111111111111111111`
+
+    Creates new accounts, allocates data space, assigns ownership to other programs, and transfers lamports between system-owned accounts. Every new account on Solana starts life as a system account.
+  </Card>
+  <Card title="BPF Upgradeable Loader" icon="upload">
+    **ID:** `BPFLoaderUpgradeab1e11111111111111111111111`
+
+    Deploys, upgrades, and executes user-deployed programs. It owns the program account and the corresponding program-data account that holds the bytecode. When the runtime invokes your program, it passes it through the loader.
+  </Card>
+  <Card title="Stake Program" icon="lock">
+    **ID:** `Stake11111111111111111111111111111111111111`
+
+    Creates and manages stake accounts — the accounts used to delegate SOL to validators and earn staking rewards. Stake delegation, activation, deactivation, and withdrawal are all handled through instructions to this program.
+  </Card>
+  <Card title="Vote Program" icon="check">
+    **ID:** `Vote111111111111111111111111111111111111111`
+
+    Creates and manages validator vote accounts, which track a validator's voting state and accumulated rewards. Validators submit votes through this program during consensus.
+  </Card>
+</CardGroup>
+
+<Info>
+The **SPL Token Program** (`TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA`) is a widely-used program for creating and managing fungible tokens. While not a native program, it is maintained by Solana Labs and treated as a de facto standard.
+</Info>
+
+## Program-derived addresses (PDAs)
+
+A **program-derived address** is a public key derived deterministically from a program ID and a set of seeds. PDAs do not have a corresponding private key, which means no external party can sign on their behalf — only the owning program can authorize actions involving a PDA.
+
+PDAs enable programs to act as custodians of accounts without requiring a keypair. This is the primary mechanism for creating on-chain escrows, vaults, and other program-controlled storage.
+
+```rust
+// Deriving a PDA off-chain
+let (pda, bump_seed) = Pubkey::find_program_address(
+    &[b"vault", user_wallet.as_ref()],
+    &program_id,
+);
+
+// Using the PDA as a signer inside an on-chain program
+invoke_signed(
+    &instruction,
+    &account_infos,
+    &[&[b"vault", user_wallet.as_ref(), &[bump_seed]]],
+)?;
+```
+
+<Note>
+`find_program_address` iterates through possible bump seeds (starting at 255) until it finds a point that falls off the Ed25519 curve — ensuring it has no private key. The resulting `bump_seed` must be stored or re-derived when you need to sign with the PDA on-chain.
+</Note>
+
+## Cross-program invocations (CPI)
+
+Programs on Solana can call other programs through **cross-program invocations**. When your program calls `invoke` or `invoke_signed`, the runtime suspends your program, loads the target program, executes it with the provided accounts and data, and then returns control.
+
+```rust
+use solana_program::program::invoke;
+
+// Calling the System Program to transfer lamports from within your program
+let transfer_instruction = system_instruction::transfer(
+    &from_account.key,
+    &to_account.key,
+    lamports,
+);
+
+invoke(
+    &transfer_instruction,
+    &[from_account.clone(), to_account.clone(), system_program.clone()],
+)?;
+```
+
+CPI is what makes Solana composable. Your program can transfer tokens via the Token Program, create accounts via the System Program, or call any other deployed program — all within a single transaction.
+
+<Warning>
+CPI calls are limited to a call depth of **4**. A program calling another program that calls another counts toward this limit. Design your program's call graph to stay within this constraint.
+</Warning>
+
+## Compute units
+
+Every instruction consumes **compute units** during execution. The runtime enforces a per-transaction compute budget (default: 200,000 compute units per instruction, up to 1,400,000 per transaction). If a program exceeds its budget, the transaction fails with a compute budget exceeded error.
+
+You can request a higher compute unit limit using the `ComputeBudgetProgram`:
+
+```typescript
+import { ComputeBudgetProgram } from "@solana/web3.js";
+
+const modifyComputeUnits = ComputeBudgetProgram.setComputeUnitLimit({
+  units: 400_000,
+});
+```
+
+<CardGroup cols={2}>
+  <Card title="Accounts" icon="database" href="/concepts/accounts">
+    Understand how programs own and modify account state.
+  </Card>
+  <Card title="Transactions" icon="arrow-right-arrow-left" href="/concepts/transactions">
+    Learn how instructions invoke programs within a transaction.
+  </Card>
+</CardGroup>

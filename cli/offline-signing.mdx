@@ -1,0 +1,134 @@
+---
+title: "Sign Solana Transactions Offline"
+description: "Learn how to sign Solana transactions on an air-gapped machine and submit them from an online machine using the --sign-only and --signer flags."
+---
+
+Keeping your signing keys on a machine that is never connected to the internet — an air-gapped or "offline" machine — is one of the strongest security practices available to Solana users. Offline signing separates the act of authorizing a transaction from the act of broadcasting it: you construct and sign the transaction offline, then hand the signature to an online machine that submits it to the cluster.
+
+## When to use offline signing
+
+Offline signing is valuable in two main scenarios:
+
+- **Air-gapped signers** — a dedicated device that is physically disconnected from the network holds the private key and produces signatures.
+- **Multi-signature schemes** — signers are geographically distributed and sign separately, with their signatures later combined to form a valid transaction.
+
+## Commands that support offline signing
+
+The following CLI commands accept the `--sign-only` flag:
+
+- `transfer`
+- `create-stake-account`, `create-stake-account-checked`
+- `delegate-stake`, `deactivate-stake`, `split-stake`, `withdraw-stake`
+- `stake-authorize`, `stake-authorize-checked`, `stake-set-lockup`, `stake-set-lockup-checked`
+- `create-vote-account`, `vote-authorize-voter`, `vote-authorize-voter-checked`
+- `vote-authorize-withdrawer`, `vote-authorize-withdrawer-checked`
+- `vote-update-commission`, `vote-update-validator`, `withdraw-from-vote-account`
+
+## The two-step process
+
+<Steps>
+  <Step title="Sign on the offline machine">
+    On your air-gapped machine, add two flags to any supported command:
+
+    - `--sign-only` — prevents the CLI from submitting the transaction; instead it prints the signature.
+    - `--blockhash <BASE58_HASH>` — supplies the recent blockhash manually so the CLI does not need to query the network.
+
+    You must obtain a recent blockhash from the online machine first, then supply it to the offline command. A blockhash expires after approximately one minute — use a [durable nonce](/cli/durable-nonce) if your signing process takes longer.
+
+    **Example: sign a transfer offline**
+
+    ```bash
+    solana transfer --sign-only --blockhash 5Tx8F3jgSHx21CbtjwmdaKPLM5tWmreWAnPrbqHomSJF \
+        recipient-keypair.json 1
+    ```
+
+    Output:
+
+    ```text
+    Blockhash: 5Tx8F3jgSHx21CbtjwmdaKPLM5tWmreWAnPrbqHomSJF
+    Signers (Pubkey=Signature):
+      FhtzLVsmcV7S5XqGD79ErgoseCLhZYmEZnz9kQg1Rp7j=4vC38p4bz7XyiXrk6HtaooUqwxTWKocf45cstASGtmrD398biNJnmTcUCVEojE7wVQvgdYbjHJqRFZPpzfCQpmUN
+    ```
+
+    Copy the `Pubkey=Signature` pair. You will pass it to the online machine.
+  </Step>
+  <Step title="Submit on the online machine">
+    On the internet-connected machine, run the same command again without `--sign-only`, instead providing:
+
+    - `--blockhash <BASE58_HASH>` — the same hash used when signing
+    - `--signer <PUBKEY>=<SIGNATURE>` — the pubkey/signature pair from the offline step
+
+    **Example: submit the offline-signed transfer**
+
+    ```bash
+    solana transfer --blockhash 5Tx8F3jgSHx21CbtjwmdaKPLM5tWmreWAnPrbqHomSJF \
+        --signer FhtzLVsmcV7S5XqGD79ErgoseCLhZYmEZnz9kQg1Rp7j=4vC38p4bz7XyiXrk6HtaooUqwxTWKocf45cstASGtmrD398biNJnmTcUCVEojE7wVQvgdYbjHJqRFZPpzfCQpmUN \
+        recipient-keypair.json 1
+    ```
+
+    Output:
+
+    ```text
+    4vC38p4bz7XyiXrk6HtaooUqwxTWKocf45cstASGtmrD398biNJnmTcUCVEojE7wVQvgdYbjHJqRFZPpzfCQpmUN
+    ```
+
+    This is the transaction signature confirming successful submission.
+  </Step>
+</Steps>
+
+## Multi-session offline signing
+
+When a transaction requires signatures from multiple independent signers (each on their own offline machine), you collect signatures across separate sessions and then combine them for submission.
+
+For each signing session, provide the public keys of the other (absent) signers using `--from` or `--fee-payer` with their public keys instead of keypair files. The CLI will mark them as "absent" in the output.
+
+**Offline Session 1 (fee payer signs):**
+
+```text
+solana transfer Fdri24WUGtrCXZ55nXiewAj6RM18hRHPGAjZk3o6vBut 10 \
+    --blockhash 7ALDjLv56a8f6sH6upAZALQKkXyjAwwENH9GomyM8Dbc \
+    --sign-only \
+    --keypair fee_payer.json \
+    --from 674RgFMgdqdRoVtMqSBg7mHFbrrNm1h1r721H1ZMquHL
+```
+
+```text
+Blockhash: 7ALDjLv56a8f6sH6upAZALQKkXyjAwwENH9GomyM8Dbc
+Signers (Pubkey=Signature):
+  3bo5YiRagwmRikuH6H1d2gkKef5nFZXE3gJeoHxJbPjy=ohGKvpRC46jAduwU9NW8tP91JkCT5r8Mo67Ysnid4zc76tiiV1Ho6jv3BKFSbBcr2NcPPCarmfTLSkTHsJCtdYi
+Absent Signers (Pubkey):
+  674RgFMgdqdRoVtMqSBg7mHFbrrNm1h1r721H1ZMquHL
+```
+
+**Offline Session 2 (sender signs):**
+
+```text
+solana transfer Fdri24WUGtrCXZ55nXiewAj6RM18hRHPGAjZk3o6vBut 10 \
+    --blockhash 7ALDjLv56a8f6sH6upAZALQKkXyjAwwENH9GomyM8Dbc \
+    --sign-only \
+    --keypair from.json \
+    --fee-payer 3bo5YiRagwmRikuH6H1d2gkKef5nFZXE3gJeoHxJbPjy
+```
+
+```text
+Blockhash: 7ALDjLv56a8f6sH6upAZALQKkXyjAwwENH9GomyM8Dbc
+Signers (Pubkey=Signature):
+  674RgFMgdqdRoVtMqSBg7mHFbrrNm1h1r721H1ZMquHL=3vJtnba4dKQmEAieAekC1rJnPUndBcpvqRPRMoPWqhLEMCty2SdUxt2yvC1wQW6wVUa5putZMt6kdwCaTv8gk7sQ
+Absent Signers (Pubkey):
+  3bo5YiRagwmRikuH6H1d2gkKef5nFZXE3gJeoHxJbPjy
+```
+
+**Online submission (combine both signatures):**
+
+```text
+solana transfer Fdri24WUGtrCXZ55nXiewAj6RM18hRHPGAjZk3o6vBut 10 \
+    --blockhash 7ALDjLv56a8f6sH6upAZALQKkXyjAwwENH9GomyM8Dbc \
+    --from 674RgFMgdqdRoVtMqSBg7mHFbrrNm1h1r721H1ZMquHL \
+    --signer 674RgFMgdqdRoVtMqSBg7mHFbrrNm1h1r721H1ZMquHL=3vJtnba4dKQmEAieAekC1rJnPUndBcpvqRPRMoPWqhLEMCty2SdUxt2yvC1wQW6wVUa5putZMt6kdwCaTv8gk7sQ \
+    --fee-payer 3bo5YiRagwmRikuH6H1d2gkKef5nFZXE3gJeoHxJbPjy \
+    --signer 3bo5YiRagwmRikuH6H1d2gkKef5nFZXE3gJeoHxJbPjy=ohGKvpRC46jAduwU9NW8tP91JkCT5r8Mo67Ysnid4zc76tiiV1Ho6jv3BKFSbBcr2NcPPCarmfTLSkTHsJCtdYi
+```
+
+## Blockhash expiry and durable nonces
+
+A blockhash is valid for approximately one minute from when it was observed. If your signing procedure takes longer than that — for example, because it involves physical mail or multiple approvals — use a [durable nonce](/cli/durable-nonce) instead. Durable nonces replace the expiring blockhash with a value stored on-chain that does not expire until you explicitly advance it.

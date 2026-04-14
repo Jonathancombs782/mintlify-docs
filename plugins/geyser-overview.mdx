@@ -1,0 +1,171 @@
+---
+title: "Stream Blockchain Data with Geyser Plugins"
+description: "Learn how the Solana Geyser plugin system lets validators stream accounts, transactions, and block data to external stores like PostgreSQL or Kafka."
+---
+
+Validators under heavy RPC loads — for example, when serving `getProgramAccounts` calls — can fall behind the network. The Geyser plugin system solves this by letting a validator stream account, slot, transaction, and block data to an external data store (such as a relational database, NoSQL store, or message queue like Kafka) in real time. Separate RPC services then consume data from that external store, which can be optimized with caching and indexing independently of the validator process.
+
+## How Geyser works
+
+When you start a validator with a Geyser plugin configured, the validator loads your plugin as a shared library (`.so`) at startup. From that point on, the plugin receives callbacks for every account update, slot status change, and transaction — forwarding them to whatever external store you have implemented.
+
+The key crates involved are:
+
+- **`solana-geyser-plugin-interface`** — Defines the `GeyserPlugin` trait your plugin must implement.
+- **`solana-accountsdb-plugin-postgres`** — A reference implementation that writes data to PostgreSQL.
+
+## Typical use cases
+
+<AccordionGroup>
+  <Accordion title="Data indexing">
+    Index all account state changes into a queryable database so you can serve complex queries (e.g., filtering by program owner) without burdening the validator.
+  </Accordion>
+  <Accordion title="Analytics pipelines">
+    Forward transactions and block metadata to a streaming platform like Kafka or Kinesis, then consume them with your analytics tooling downstream.
+  </Accordion>
+  <Accordion title="RPC scaling">
+    Offload read-heavy RPC traffic (such as `getProgramAccounts`) to a dedicated service backed by PostgreSQL or another indexed store, freeing the validator to focus on consensus.
+  </Accordion>
+  <Accordion title="Historical data archival">
+    Enable `store_account_historical_data` to track every mutation to an account over time, building a full audit trail without requiring a separate archival node.
+  </Accordion>
+</AccordionGroup>
+
+## Loading a plugin into a validator
+
+You configure a Geyser plugin by writing a JSON5 configuration file and passing its path to the `--geyser-plugin-config` flag when starting the validator.
+
+<Steps>
+  <Step title="Build your plugin shared library">
+    Compile your plugin to a shared library (`.so` on Linux). The library must export a `_create_plugin` C function that returns a pointer to your `GeyserPlugin` implementation.
+  </Step>
+  <Step title="Write a plugin configuration file">
+    Create a JSON5 file with at minimum a `libpath` field pointing to your compiled `.so`. Add any other fields your plugin reads during `on_load`.
+
+    ```json plugin-config.json
+    {
+      "libpath": "/solana/target/release/libsolana_geyser_plugin_postgres.so",
+      "host": "postgres-server",
+      "user": "solana",
+      "port": 5433,
+      "threads": 20,
+      "batch_size": 20,
+      "panic_on_db_errors": true,
+      "accounts_selector": {
+        "accounts": ["*"]
+      }
+    }
+    ```
+
+    | Field | Description |
+    |---|---|
+    | `libpath` | Full path to the compiled plugin shared library. Required. |
+    | `host` | PostgreSQL server hostname (reference plugin). |
+    | `user` | Database user (reference plugin). |
+    | `port` | Database port (reference plugin). |
+    | `threads` | Connection pool size for concurrent database writes. |
+    | `batch_size` | Number of accounts written per batch insert at startup. |
+    | `panic_on_db_errors` | Abort the validator on database errors to preserve data consistency. |
+    | `accounts_selector` | Filter which accounts are streamed (see below). |
+
+  </Step>
+  <Step title="Start the validator with the plugin">
+    Pass `--geyser-plugin-config` with the path to your configuration file:
+
+    ```bash
+    solana-validator \
+      --geyser-plugin-config /path/to/plugin-config.json \
+      --ledger /path/to/ledger \
+      ...
+    ```
+
+    The validator dynamically loads the shared library at startup and begins invoking plugin callbacks immediately.
+  </Step>
+</Steps>
+
+<Warning>
+  The configuration file must be readable by the validator process. Ensure file permissions are set correctly before starting the validator.
+</Warning>
+
+## Filtering streamed data
+
+### Account selection
+
+Use `accounts_selector` to control which accounts your plugin receives. You can filter by specific public keys, by program owners, or select all accounts with a wildcard.
+
+<CodeGroup>
+
+```json Select all accounts
+{
+  "accounts_selector": {
+    "accounts": ["*"]
+  }
+}
+```
+
+```json Select specific accounts by pubkey
+{
+  "accounts_selector": {
+    "accounts": ["pubkey-1", "pubkey-2", "pubkey-n"]
+  }
+}
+```
+
+```json Select accounts by program owner
+{
+  "accounts_selector": {
+    "owners": ["pubkey-owner-1", "pubkey-owner-2"]
+  }
+}
+```
+
+</CodeGroup>
+
+### Transaction selection
+
+Use `transaction_selector` to filter which transactions are streamed. If this field is omitted, no transactions are stored.
+
+<CodeGroup>
+
+```json Select all transactions
+{
+  "transaction_selector": {
+    "mentions": ["*"]
+  }
+}
+```
+
+```json Select all vote transactions
+{
+  "transaction_selector": {
+    "mentions": ["all_votes"]
+  }
+}
+```
+
+```json Select transactions referencing specific accounts
+{
+  "transaction_selector": {
+    "mentions": ["pubkey-1", "pubkey-2"]
+  }
+}
+```
+
+</CodeGroup>
+
+## Performance considerations
+
+<Note>
+  When streaming all accounts, the overhead of persisting data can cause a validator with insufficient compute power to fall behind the network. Size your validator and database nodes accordingly.
+</Note>
+
+The reference PostgreSQL implementation has been tested with GCP `n2-standard-64` for the validator and `n2-highmem-32` for the database node when streaming all accounts. Additional guidance:
+
+- **Keep the validator and database in the same local network** to minimize write latency.
+- **Increase `threads`** for higher throughput to the database via connection pooling.
+- **Increase `batch_size`** to reduce round trips during the initial account snapshot at startup.
+- **Set `panic_on_db_errors: true`** so that if the database becomes unavailable, the validator restarts cleanly and re-transmits account data from its snapshot rather than silently dropping updates.
+
+## Next steps
+
+Once you understand the plugin lifecycle and configuration, read the [Geyser plugin interface reference](/plugins/geyser-interface) to learn which trait methods you must implement and what data each callback provides.

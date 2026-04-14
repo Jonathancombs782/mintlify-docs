@@ -1,0 +1,119 @@
+---
+title: "Frequently Asked Questions about Solana"
+description: "Answers to common questions about validators, RPC nodes, clusters, staking, hardware requirements, Devnet, Mainnet Beta, and the economics of running a node."
+---
+
+This page answers common questions from operators, developers, and delegators who are new to the Solana ecosystem. If you don't find what you're looking for here, the [Solana validator Discord](https://discord.gg/solana) is the best place to ask the community.
+
+<AccordionGroup>
+
+  <Accordion title="What is a validator?">
+    A validator is a computer that runs the Solana validator software to verify transactions added to the Solana blockchain. Each validator executes a program that tracks all accounts on its cluster and validates transactions being added to the network. Without validators, Solana could not function.
+
+    Validators fall into two categories:
+
+    - **Voting (consensus) validators** — participate in the consensus process by casting votes on blocks. They incur vote transaction fees (up to 1.1 SOL per day) and earn block rewards.
+    - **Non-voting validators** — run the same software but do not vote. They are typically used as RPC nodes.
+
+    There is no limit to the number of validators that can participate. All Solana clusters are permissionless — anyone can join at any time. For more detail, see [what is a validator](/validators/overview).
+  </Accordion>
+
+  <Accordion title="What is an RPC node?">
+    An RPC (Remote Procedure Call) node runs the same validator software but does not participate in consensus. Its purpose is to respond to API requests and allow clients to submit new transactions to the network.
+
+    For example, a web application that transfers tokens from one wallet to another sends the signed transaction to an RPC node, which relays it to the current block leader. Running an RPC node is analogous to operating a public API endpoint.
+
+    Running both an RPC service and a voting validator on the same machine is strongly discouraged — neither task will perform adequately. For more information, see [what is an RPC node](/validators/rpc-node).
+  </Accordion>
+
+  <Accordion title="What is a cluster?">
+    A cluster is a set of validators that together maintain a single ledger. Validators in a cluster communicate with each other to reach consensus on which transactions to include in blocks.
+
+    Solana maintains several public clusters:
+
+    | Cluster | Purpose |
+    |---|---|
+    | **Mainnet Beta** | Production network. Real SOL is used. |
+    | **Testnet** | Staging environment. Runs the latest beta software. No real value. |
+    | **Devnet** | Development and testing. Free SOL available from a faucet. No real value. |
+
+    See [Solana clusters](/clusters/overview) for connection endpoints and configuration details.
+  </Accordion>
+
+  <Accordion title="What is Proof of Stake?">
+    Proof of Stake (PoS) is the consensus architecture Solana uses. Token holders stake their SOL to a validator of their choice. Staked tokens represent trust in that validator — the more stake a validator holds, the greater its vote share in consensus, and the more opportunities it gets to produce blocks.
+
+    Stakers earn rewards proportional to their delegated stake. You retain ownership of your tokens at all times and can remove your stake at any time, though it takes one full epoch to become effective.
+
+    Solana augments PoS with Proof of History (PoH), a cryptographic clock that lets validators agree on transaction ordering without communicating at every step. PoH is what allows Solana to achieve sub-second finality.
+  </Accordion>
+
+  <Accordion title="Is running a Solana validator the same as mining?">
+    No. Solana uses Proof of Stake, not Proof of Work. Mining refers to the process of repeatedly hashing data to win the right to produce a block — an energy-intensive race that rewards whoever has the most compute power.
+
+    Solana validators do not compete to solve cryptographic puzzles. A validator's influence is proportional to the stake delegated to it, not its hardware speed. There is no advantage to running multiple machines to increase your rewards, which means Solana's energy consumption is orders of magnitude lower than Proof of Work chains.
+  </Accordion>
+
+  <Accordion title="Who can operate a validator?">
+    Anyone can operate a validator. All Solana clusters are fully permissionless — you do not need approval to join, and there is no cap on the total number of validators. You can start participating in consensus as soon as your node is synced and has stake delegated to it.
+  </Accordion>
+
+  <Accordion title="What are the hardware requirements for running a validator?">
+    Hardware requirements depend on whether you are running a voting validator or an RPC node. At a high level, validators require high-core-count CPUs, large amounts of RAM, fast NVMe storage, and a high-bandwidth, low-latency network connection.
+
+    For current, detailed specifications including CPU, memory, disk, and networking minimums, see the [validator requirements](/validators/requirements) page. Requirements are updated as the network grows.
+
+    Many home internet connections are not suitable for running a Solana validator. Most operators choose to run their validator in a data center — either with a dedicated server provider or by co-locating their own hardware.
+  </Accordion>
+
+  <Accordion title="What are the economics of running a validator?">
+    A voting validator earns income from two sources:
+
+    - **Block rewards** — validators that produce blocks receive a portion of the inflation-based rewards and transaction fees for that block.
+    - **Staking rewards** — validators (and their delegators) earn inflationary rewards proportional to the amount of stake they hold.
+
+    On the cost side, a voting validator pays up to 1.1 SOL per day in vote transaction fees. You also incur infrastructure costs (server hardware or hosting fees).
+
+    Profitability depends on the amount of stake delegated to your validator. Validators with very little stake may not earn enough rewards to offset vote transaction fees. For a detailed breakdown, see the [economics of running a validator](/validators/rpc-node).
+  </Accordion>
+
+  <Accordion title="What is Devnet and how do I get free SOL?">
+    Devnet is a public cluster intended for application development and testing. SOL on Devnet has no real-world value and is freely available from a faucet.
+
+    To request Devnet SOL using the Solana CLI:
+
+    ```bash
+    solana config set --url https://api.devnet.solana.com
+    solana airdrop 2
+    ```
+
+    You can also use the [web faucet at faucet.solana.com](https://faucet.solana.com). Faucet requests are rate-limited; if you need larger amounts for testing, you can run a local test validator instead.
+
+    <Note>
+      Never use real SOL (Mainnet Beta) when you intend to test. Always verify that your CLI is pointed at Devnet or a local cluster before running transactions.
+    </Note>
+  </Accordion>
+
+  <Accordion title="What is Mainnet Beta?">
+    Mainnet Beta is Solana's production network where real SOL is used and all transactions have real economic value. Despite the "Beta" label — a holdover from the network's early days — Mainnet Beta is the canonical production environment for deployed programs, DeFi protocols, NFT marketplaces, and all production applications.
+
+    The `stable` release channel software runs on Mainnet Beta. Breaking changes are never introduced directly — they go through Testnet (`beta` channel) first and are promoted to `stable` only after being proven reliable.
+  </Accordion>
+
+  <Accordion title="How do staking rewards work?">
+    When you delegate SOL to a validator, your stake earns inflationary rewards each epoch (approximately every 2–3 days). Rewards are automatically added to your stake account at the end of each epoch — you do not need to claim them manually.
+
+    The reward rate depends on:
+
+    - **Total network stake** — the more of the total SOL supply that is staked, the lower the per-token reward rate (the protocol targets a participation ratio).
+    - **Validator performance** — a validator that misses votes earns fewer rewards for its delegators.
+    - **Commission** — validators charge a commission percentage on rewards. Check a validator's commission before delegating.
+
+    You can monitor your stake account and accrued rewards with:
+
+    ```bash
+    solana stake-account <STAKE_ACCOUNT_ADDRESS>
+    ```
+  </Accordion>
+
+</AccordionGroup>

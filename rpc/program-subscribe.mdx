@@ -1,0 +1,271 @@
+---
+title: "programSubscribe WebSocket Method"
+description: "Subscribe to notifications for all accounts owned by a program, with optional memcmp and dataSize filters to narrow the subscription to specific accounts."
+---
+
+The `programSubscribe` method sends a notification every time any account owned by the given program is created or updated. Each notification includes the account's public key along with its full account data in the same format as `getAccountInfo`. This is the right subscription to use when you want to track all state changes across an entire protocol — for example, watching every liquidity pool account owned by a DEX program.
+
+## Connecting
+
+Connect to the WebSocket endpoint before subscribing:
+
+```javascript
+const ws = new WebSocket("wss://api.devnet.solana.com");
+```
+
+See [WebSocket Subscriptions Overview](/rpc/websocket-subscriptions) for connection details.
+
+## programSubscribe
+
+### Parameters
+
+<ParamField path="params[0]" type="string" required>
+  The base-58 encoded public key of the program whose accounts you want to watch.
+</ParamField>
+
+<ParamField path="params[1]" type="object">
+  Optional configuration object.
+
+  <Expandable title="config fields">
+    <ParamField path="encoding" type="string" default="base64">
+      Encoding for account data in notifications. Accepted values: `base58`, `base64`, `base64+zstd`, `jsonParsed`.
+    </ParamField>
+
+    <ParamField path="commitment" type="string" default="finalized">
+      Commitment level for notifications. One of `processed`, `confirmed`, or `finalized`.
+    </ParamField>
+
+    <ParamField path="filters" type="array">
+      Array of filter objects to restrict which accounts trigger notifications. Up to 4 filters are supported per subscription. All filters must match for a notification to fire.
+
+      <Expandable title="filter types">
+        <ParamField path="dataSize" type="number">
+          Match accounts whose data is exactly this many bytes.
+        </ParamField>
+
+        <ParamField path="memcmp" type="object">
+          Match accounts where a byte range in the data equals a given value.
+
+          <Expandable title="memcmp fields">
+            <ParamField path="offset" type="number" required>
+              Byte offset at which to start the comparison.
+            </ParamField>
+            <ParamField path="bytes" type="string" required>
+              The value to compare against, encoded as base-58 (up to 128 decoded bytes).
+            </ParamField>
+            <ParamField path="encoding" type="string">
+              Encoding of the `bytes` value. Accepted values: `base58` (default), `base64`.
+            </ParamField>
+          </Expandable>
+        </ParamField>
+      </Expandable>
+    </ParamField>
+
+    <ParamField path="withContext" type="boolean" default="false">
+      When `true`, wraps the notification value in a context object with the slot number.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Subscribe request — all program accounts
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "programSubscribe",
+  "params": [
+    "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    { "encoding": "jsonParsed", "commitment": "confirmed" }
+  ]
+}
+```
+
+### Subscribe request — with dataSize filter
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "programSubscribe",
+  "params": [
+    "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    {
+      "encoding": "jsonParsed",
+      "commitment": "confirmed",
+      "filters": [
+        { "dataSize": 165 }
+      ]
+    }
+  ]
+}
+```
+
+### Subscribe request — with memcmp filter
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "programSubscribe",
+  "params": [
+    "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    {
+      "encoding": "base64",
+      "commitment": "confirmed",
+      "filters": [
+        {
+          "memcmp": {
+            "offset": 0,
+            "bytes": "3emsAVdmGKERbHjmGfQ6oZ1e35dkf5iYcS6U4CPKFVsk"
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Subscribe response
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": 24321
+}
+```
+
+Store the `subscriptionId` (`24321`) to unsubscribe later.
+
+## Notification format
+
+<ResponseField name="method" type="string">
+  Always `"programNotification"`.
+</ResponseField>
+
+<ResponseField name="params.subscription" type="number">
+  The subscription ID.
+</ResponseField>
+
+<ResponseField name="params.result.context.slot" type="number">
+  The slot at which the account change was observed.
+</ResponseField>
+
+<ResponseField name="params.result.value" type="object">
+  The updated account keyed by its public key.
+
+  <Expandable title="value fields">
+    <ResponseField name="pubkey" type="string">
+      Base-58 encoded public key of the changed account.
+    </ResponseField>
+    <ResponseField name="account.lamports" type="number">
+      Lamport balance of the account.
+    </ResponseField>
+    <ResponseField name="account.owner" type="string">
+      Base-58 encoded public key of the program that owns this account.
+    </ResponseField>
+    <ResponseField name="account.data" type="array | object">
+      Account data in the requested encoding.
+    </ResponseField>
+    <ResponseField name="account.executable" type="boolean">
+      Whether this is an executable program account.
+    </ResponseField>
+    <ResponseField name="account.rentEpoch" type="number">
+      Epoch at which rent will next be collected.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Notification example
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "programNotification",
+  "params": {
+    "subscription": 24321,
+    "result": {
+      "context": { "slot": 278066450 },
+      "value": {
+        "pubkey": "H4vnBqifaSACnKa7acsxstsY1iV1bvJNxsCY7enrd1hq",
+        "account": {
+          "lamports": 2039280,
+          "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+          "data": ["dGVzdA==", "base64"],
+          "executable": false,
+          "rentEpoch": 361
+        }
+      }
+    }
+  }
+}
+```
+
+## programUnsubscribe
+
+### Unsubscribe request
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "programUnsubscribe",
+  "params": [24321]
+}
+```
+
+### Unsubscribe response
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": true
+}
+```
+
+## Full JavaScript example
+
+```javascript
+const ws = new WebSocket("wss://api.devnet.solana.com");
+let subscriptionId = null;
+
+const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+
+ws.addEventListener("open", () => {
+  ws.send(JSON.stringify({
+    jsonrpc: "2.0",
+    id: 1,
+    method: "programSubscribe",
+    params: [
+      TOKEN_PROGRAM,
+      {
+        encoding: "jsonParsed",
+        commitment: "confirmed",
+        filters: [{ dataSize: 165 }],
+      },
+    ],
+  }));
+});
+
+ws.addEventListener("message", (event) => {
+  const message = JSON.parse(event.data);
+
+  if (message.id === 1 && message.result !== undefined) {
+    subscriptionId = message.result;
+    console.log("Subscribed to program, ID:", subscriptionId);
+    return;
+  }
+
+  if (message.method === "programNotification") {
+    const { pubkey, account } = message.params.result.value;
+    console.log("Account updated:", pubkey);
+    console.log("New lamport balance:", account.lamports);
+  }
+});
+```
+
+<Warning>
+Subscribing to a high-traffic program without filters (such as the SPL Token program on Mainnet Beta) will generate an enormous volume of notifications. Always use `dataSize` and `memcmp` filters to scope the subscription to only the accounts you care about.
+</Warning>

@@ -1,0 +1,210 @@
+---
+title: "getBlock RPC Method"
+description: "Returns the full contents of a confirmed block by slot number, including transactions, metadata, rewards, and block header fields."
+---
+
+The `getBlock` method retrieves all data associated with a confirmed block at a given slot number. You can control how much data is returned — from the full transaction set with metadata, to just the block header and reward information — using the configuration object. This method is useful for indexing, auditing, and building block explorers.
+
+## Parameters
+
+<ParamField path="params[0]" type="number" required>
+  The slot number of the block to retrieve.
+</ParamField>
+
+<ParamField path="params[1]" type="object">
+  Optional configuration object.
+
+  <Expandable title="config fields">
+    <ParamField path="encoding" type="string" default="json">
+      Encoding for each returned transaction. Accepted values:
+
+      - `json` — decoded, human-readable JSON (default).
+      - `jsonParsed` — decoded with parsed instruction data where the node has a program parser.
+      - `base58` — binary encoding; slow and limited to small transactions.
+      - `base64` — base64-encoded binary transaction data.
+    </ParamField>
+
+    <ParamField path="transactionDetails" type="string" default="full">
+      Level of transaction detail to include. Accepted values:
+
+      - `full` — full transaction data including all instructions and inner instructions (default).
+      - `accounts` — only account keys and signatures.
+      - `signatures` — only transaction signatures.
+      - `none` — no transaction data; only block header and rewards.
+    </ParamField>
+
+    <ParamField path="rewards" type="boolean" default="true">
+      Whether to populate the `rewards` array. Set to `false` to reduce response size when you only need transaction data.
+    </ParamField>
+
+    <ParamField path="commitment" type="string" default="finalized">
+      Commitment level. Only `confirmed` and `finalized` are accepted for `getBlock`. `processed` is not supported.
+    </ParamField>
+
+    <ParamField path="maxSupportedTransactionVersion" type="number">
+      The maximum transaction version to return. If a block contains a transaction with a higher version than this value, the method returns an error. Omit this field to return only legacy transactions. Set to `0` to include version 0 (versioned) transactions.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## Response
+
+Returns `null` if the block is not available. Otherwise returns a block object.
+
+<ResponseField name="blockhash" type="string" required>
+  The base-58 encoded blockhash of this block.
+</ResponseField>
+
+<ResponseField name="previousBlockhash" type="string" required>
+  The base-58 encoded blockhash of the parent block.
+</ResponseField>
+
+<ResponseField name="parentSlot" type="number" required>
+  The slot of the parent block.
+</ResponseField>
+
+<ResponseField name="blockHeight" type="number | null">
+  The number of blocks beneath this block. `null` if not available.
+</ResponseField>
+
+<ResponseField name="blockTime" type="number | null">
+  Estimated Unix timestamp (seconds since epoch) at which this block was produced. `null` if not available.
+</ResponseField>
+
+<ResponseField name="transactions" type="array">
+  Array of transactions included in this block. Present when `transactionDetails` is `full` or `accounts`.
+
+  <Expandable title="transaction fields">
+    <ResponseField name="transaction" type="object | string">
+      The transaction data. Shape depends on `encoding`. For `json` encoding this is a decoded object with `message` and `signatures` fields.
+    </ResponseField>
+    <ResponseField name="meta" type="object | null">
+      Transaction status metadata.
+
+      <Expandable title="meta fields">
+        <ResponseField name="err" type="object | null">
+          Error if the transaction failed, or `null` on success.
+        </ResponseField>
+        <ResponseField name="fee" type="number">
+          Fee paid by this transaction in lamports.
+        </ResponseField>
+        <ResponseField name="preBalances" type="number[]">
+          Array of lamport balances for each account in the transaction, before processing.
+        </ResponseField>
+        <ResponseField name="postBalances" type="number[]">
+          Array of lamport balances for each account in the transaction, after processing.
+        </ResponseField>
+        <ResponseField name="innerInstructions" type="array | null">
+          List of inner instructions, or `null` if not enabled.
+        </ResponseField>
+        <ResponseField name="logMessages" type="string[] | null">
+          Array of log messages produced by the transaction, or `null` if not enabled.
+        </ResponseField>
+        <ResponseField name="preTokenBalances" type="array">
+          Token balances for SPL Token accounts before processing.
+        </ResponseField>
+        <ResponseField name="postTokenBalances" type="array">
+          Token balances for SPL Token accounts after processing.
+        </ResponseField>
+        <ResponseField name="computeUnitsConsumed" type="number">
+          Compute units consumed by this transaction.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    <ResponseField name="version" type="string | number">
+      Transaction version. `"legacy"` for pre-versioned transactions, or a number for versioned transactions.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="signatures" type="string[]">
+  Present when `transactionDetails` is `signatures`. Array of base-58 transaction signatures in the block.
+</ResponseField>
+
+<ResponseField name="rewards" type="array">
+  Array of rewards credited at the end of this block. Present when `rewards` is `true` (the default).
+
+  <Expandable title="reward fields">
+    <ResponseField name="pubkey" type="string">
+      The base-58 public key of the account that received the reward.
+    </ResponseField>
+    <ResponseField name="lamports" type="number">
+      The reward amount in lamports (negative for penalty).
+    </ResponseField>
+    <ResponseField name="postBalance" type="number">
+      Account balance in lamports after the reward was applied.
+    </ResponseField>
+    <ResponseField name="rewardType" type="string">
+      Type of reward: `fee`, `rent`, `voting`, or `staking`.
+    </ResponseField>
+    <ResponseField name="commission" type="number | null">
+      Vote account commission when the reward was earned. Only set for `voting` and `staking` reward types.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Example
+
+```bash
+curl https://api.mainnet-beta.solana.com \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "getBlock",
+    "params": [
+      430,
+      {
+        "encoding": "json",
+        "transactionDetails": "full",
+        "rewards": false,
+        "commitment": "finalized",
+        "maxSupportedTransactionVersion": 0
+      }
+    ]
+  }'
+```
+
+### Response example (abbreviated)
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "blockHeight": 428,
+    "blockTime": 1718000000,
+    "blockhash": "3Eq21vXNB5s86c62bVuUfTeaMif1N2kUqRPBmGRJhyTA",
+    "parentSlot": 429,
+    "previousBlockhash": "mfcyqEXB3DnHXki6KjjmZck6YjmZLvpAByy2fj4nh6B",
+    "transactions": [
+      {
+        "meta": {
+          "err": null,
+          "fee": 5000,
+          "preBalances": [499995000, 26858640, 1],
+          "postBalances": [499990000, 26858640, 1],
+          "logMessages": [
+            "Program 11111111111111111111111111111111 invoke [1]",
+            "Program 11111111111111111111111111111111 success"
+          ],
+          "computeUnitsConsumed": 150
+        },
+        "transaction": {
+          "message": {
+            "accountKeys": ["..."],
+            "instructions": [{ "programIdIndex": 2 }]
+          },
+          "signatures": ["5h6xBEauJ..."]
+        },
+        "version": "legacy"
+      }
+    ]
+  }
+}
+```
+
+<Warning>
+`getBlock` can return very large responses for busy slots. Use `transactionDetails: "signatures"` or `"none"` when you only need summary information, and add `rewards: false` to further reduce response size.
+</Warning>

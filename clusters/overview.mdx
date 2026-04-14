@@ -1,0 +1,139 @@
+---
+title: "Solana Clusters: Devnet, Testnet, and Mainnet Beta"
+description: "Learn about Solana's three public clusters — Devnet, Testnet, and Mainnet Beta — their RPC endpoints, intended uses, and how to switch between them."
+---
+
+Solana maintains three public clusters, each serving a distinct purpose in the development and production lifecycle. Understanding which cluster to target — and how to switch between them — is essential before you run any CLI commands or deploy programs. Before you start, make sure you have [installed the Solana CLI tools](/cli/installation).
+
+## Cluster overview
+
+<CardGroup cols={3}>
+  <Card title="Devnet" icon="flask">
+    A playground for developers and validators. Tokens have no real value and a faucet provides free airdrops.
+  </Card>
+  <Card title="Testnet" icon="bug">
+    A stress-test environment run by Solana core contributors. Focuses on network performance and validator behavior.
+  </Card>
+  <Card title="Mainnet Beta" icon="globe">
+    The production network. SOL tokens are real and have monetary value.
+  </Card>
+</CardGroup>
+
+## Devnet
+
+Devnet is the recommended starting point for application developers and anyone new to Solana. It closely mirrors Mainnet Beta in software version, but its tokens are worthless test tokens and the ledger may be reset periodically.
+
+**RPC URL:** `https://api.devnet.solana.com`
+
+Key characteristics:
+
+- Tokens are **not real** and carry no monetary value
+- A token faucet lets you airdrop SOL for application testing
+- Ledger may be reset without notice
+- Typically runs the same software version as Mainnet Beta, sometimes a minor version ahead
+
+Switch to Devnet:
+
+```bash
+solana config set --url https://api.devnet.solana.com
+```
+
+Airdrop test SOL to your wallet on Devnet:
+
+```bash
+solana airdrop 1 <YOUR_WALLET_ADDRESS> --url https://api.devnet.solana.com
+```
+
+## Testnet
+
+Testnet is where Solana core contributors validate new features under real network load before they reach production. It typically runs a newer software branch than both Devnet and Mainnet Beta.
+
+**RPC URL:** `https://api.testnet.solana.com`
+
+Key characteristics:
+
+- Tokens are **not real**
+- Subject to ledger resets
+- A token faucet is available for airdrop testing
+- Runs newer software than Mainnet Beta — useful for testing against upcoming features
+
+Switch to Testnet:
+
+```bash
+solana config set --url https://api.testnet.solana.com
+```
+
+<Note>
+  Target Testnet only if you specifically need to test behavior against a newer Solana release. For most development workflows, Devnet is sufficient.
+</Note>
+
+## Mainnet Beta
+
+Mainnet Beta is the live, permissionless production network. All participants — users, builders, validators, and token holders — operate here.
+
+**RPC URL:** `https://api.mainnet-beta.solana.com`
+
+Key characteristics:
+
+- Tokens are **real SOL** with monetary value
+- Transactions are permanent and irreversible
+- No airdrop faucet — you must acquire SOL through an exchange
+
+Switch to Mainnet Beta:
+
+```bash
+solana config set --url https://api.mainnet-beta.solana.com
+```
+
+<Warning>
+  Transactions on Mainnet Beta cost real SOL and cannot be reversed. Always test your workflows on Devnet first.
+</Warning>
+
+## Switching between clusters
+
+Use `solana config set --url` to point the CLI at any cluster. Your current target cluster is stored in the CLI configuration file and applies to all subsequent commands until you change it.
+
+Check which cluster you are currently targeting:
+
+```bash
+solana config get
+```
+
+The output includes a `RPC URL` field showing the active endpoint.
+
+<Tabs>
+  <Tab title="Devnet">
+    ```bash
+    solana config set --url https://api.devnet.solana.com
+    ```
+  </Tab>
+  <Tab title="Testnet">
+    ```bash
+    solana config set --url https://api.testnet.solana.com
+    ```
+  </Tab>
+  <Tab title="Mainnet Beta">
+    ```bash
+    solana config set --url https://api.mainnet-beta.solana.com
+    ```
+  </Tab>
+</Tabs>
+
+## Verify version compatibility
+
+The CLI generally works best when its version matches or exceeds the cluster software version. Check both:
+
+```bash
+solana --version
+solana cluster-version
+```
+
+If your local CLI version is older than the cluster version, consider upgrading with `solana-install update`.
+
+## Cluster RPC endpoints at a glance
+
+| Cluster | RPC URL |
+|---|---|
+| Devnet | `https://api.devnet.solana.com` |
+| Testnet | `https://api.testnet.solana.com` |
+| Mainnet Beta | `https://api.mainnet-beta.solana.com` |

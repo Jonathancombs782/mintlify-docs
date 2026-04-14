@@ -1,0 +1,156 @@
+---
+title: "Solana Transactions: Structure and Lifecycle"
+description: "Understand how Solana transactions are structured, how instructions reference accounts, how fees are calculated, and what confirmation levels mean."
+---
+
+A transaction is the fundamental unit of interaction with the Solana network. When you transfer SOL, mint a token, or call a smart contract, you are submitting a transaction. Solana executes all instructions in a transaction atomically — either every instruction succeeds or the entire transaction rolls back, leaving no partial state changes on-chain.
+
+## Transaction structure
+
+A transaction contains two top-level fields:
+
+- **`signatures`** — One or more 64-byte Ed25519 signatures, one for each required signer.
+- **`message`** — A compiled, serialized representation of the transaction's instructions and account references.
+
+```rust
+pub struct Transaction {
+    pub signatures: Vec<Signature>,
+    pub message: Message,
+}
+```
+
+The `Message` is what signers actually sign. It includes the list of deduplicated account keys needed across all instructions, a recent blockhash, and the instructions themselves.
+
+<Note>
+Transactions do not directly embed `Instruction` objects. Instead, the `Message` compiles all instructions into a flat, deduplicated account key list. Each compiled instruction references accounts by index into that list. This makes transactions compact and avoids repeating public keys.
+</Note>
+
+## Instructions
+
+An instruction is the atomic unit of computation inside a transaction. Each instruction specifies:
+
+1. **The program to invoke** — identified by its program ID (a public key).
+2. **The accounts it reads or writes** — a list of account metas, each flagged as writable or read-only, and signer or non-signer.
+3. **Instruction data** — an arbitrary byte array that the program interprets as its input.
+
+```rust
+pub struct Instruction {
+    pub program_id: Pubkey,
+    pub accounts: Vec<AccountMeta>,
+    pub data: Vec<u8>,
+}
+
+pub struct AccountMeta {
+    pub pubkey: Pubkey,
+    pub is_signer: bool,
+    pub is_writable: bool,
+}
+```
+
+A single transaction can include instructions targeting multiple different programs. The runtime executes them in order and commits all changes only if every instruction succeeds.
+
+<Tip>
+Batching multiple operations into a single transaction is more efficient than sending them separately. You pay one base fee, and the operations are guaranteed to execute atomically.
+</Tip>
+
+## The recent blockhash
+
+Every transaction must include a **recent blockhash** — a hash from a block produced in the last ~150 slots (roughly 60–90 seconds). This serves two purposes:
+
+- It prevents replay attacks by making each transaction unique to a point in time.
+- It lets validators reject old, unexecuted transactions.
+
+If you need a transaction to remain valid for longer than the blockhash window, use a **durable nonce** — a special nonce account that replaces the blockhash with a nonce value that does not expire.
+
+## Fees
+
+Solana transaction fees have two components:
+
+<AccordionGroup>
+  <Accordion title="Base fee (signature fee)">
+    The base fee is charged per signature in the transaction. The default rate is **5,000 lamports per signature** (0.000005 SOL). A simple transfer with one signature costs 5,000 lamports.
+
+    The fee-paying account is always the first account in the `Message`'s account key list. That account must be a signer and must hold enough lamports to cover the fee.
+  </Accordion>
+  <Accordion title="Priority fee (compute unit price)">
+    You can attach an optional **priority fee** to increase the likelihood that your transaction is included in the next block during periods of high congestion. Priority fees are specified in micro-lamports per compute unit using the `ComputeBudgetProgram.setComputeUnitPrice` instruction.
+
+    The total priority fee paid is: `compute_unit_price (micro-lamports) × compute_units_used / 1,000,000`.
+  </Accordion>
+</AccordionGroup>
+
+```typescript
+// Adding a priority fee using the @solana/web3.js SDK
+import {
+  ComputeBudgetProgram,
+  TransactionMessage,
+  VersionedTransaction,
+} from "@solana/web3.js";
+
+const priorityFeeInstruction = ComputeBudgetProgram.setComputeUnitPrice({
+  microLamports: 1000, // 1000 micro-lamports per compute unit
+});
+```
+
+<Warning>
+The fee-payer's lamport balance is debited before the transaction runs. If the transaction fails, the fee is still charged — it is not refunded.
+</Warning>
+
+## Transaction size limit
+
+A serialized transaction cannot exceed **1,232 bytes**. This is a hard limit enforced by the network. Transactions that exceed this limit are rejected before execution.
+
+To work around the size limit you can:
+- Use **address lookup tables** (versioned transactions) to reference accounts by index rather than by full 32-byte public key.
+- Split logic across multiple transactions linked by a program-derived address.
+
+## Confirmation levels
+
+After you submit a transaction, you can query its status at three commitment levels:
+
+| Level | Meaning |
+|---|---|
+| `processed` | The transaction has been received and processed by the node. It may still be on a fork that does not become the canonical chain. |
+| `confirmed` | A supermajority of the cluster has voted on the block containing the transaction. It is very unlikely to be rolled back. |
+| `finalized` | The block has reached maximum lockout and has been finalized by a supermajority. It cannot be rolled back. |
+
+```typescript
+// Confirming a transaction at the "confirmed" commitment level
+const confirmation = await connection.confirmTransaction(
+  signature,
+  "confirmed"
+);
+```
+
+<Info>
+For most application use cases, `confirmed` strikes the right balance between speed and safety. Use `finalized` when absolute certainty is required, such as large value transfers or irreversible on-chain actions.
+</Info>
+
+## Transaction lifecycle
+
+<AccordionGroup>
+  <Accordion title="1. Build the transaction">
+    Construct your instructions, assemble the message with a recent blockhash, and sign with all required keypairs.
+  </Accordion>
+  <Accordion title="2. Submit to the network">
+    Send the serialized transaction to any validator's TPU (Transaction Processing Unit) port, or via the RPC `sendTransaction` method. If the node is not the current leader, it forwards the transaction to the designated leader.
+  </Accordion>
+  <Accordion title="3. Leader processing">
+    The current leader bundles incoming transactions into entries, timestamps them using Proof of History, and broadcasts the block to the cluster.
+  </Accordion>
+  <Accordion title="4. Validator confirmation">
+    Other validators replay the block, vote on it, and propagate their votes. Once a supermajority votes on the block, the transaction reaches `confirmed` status.
+  </Accordion>
+  <Accordion title="5. Finalization">
+    After the block achieves maximum vote lockout across epochs, the transaction is `finalized` and cannot be reversed.
+  </Accordion>
+</AccordionGroup>
+
+<CardGroup cols={2}>
+  <Card title="Accounts" icon="database" href="/concepts/accounts">
+    Learn how accounts are referenced and modified by transaction instructions.
+  </Card>
+  <Card title="Programs" icon="code" href="/concepts/programs">
+    Understand the on-chain programs that process your instructions.
+  </Card>
+</CardGroup>

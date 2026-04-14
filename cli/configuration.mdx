@@ -1,0 +1,108 @@
+---
+title: "Configure the Solana CLI"
+description: "Use solana config get and solana config set to view and update your CLI settings including RPC URL, keypair path, and commitment level."
+---
+
+The Solana CLI stores its settings in a configuration file, typically located at `~/.config/solana/cli/config.yml`. These settings apply to every command you run until you change them. Understanding how to view and update your configuration is the foundation for using the CLI effectively.
+
+## View your current configuration
+
+To see all current settings at once:
+
+```bash
+solana config get
+```
+
+The output looks like this:
+
+```text
+Config File: /home/user/.config/solana/cli/config.yml
+RPC URL: https://api.devnet.solana.com
+WebSocket URL: wss://api.devnet.solana.com/ (computed)
+Keypair Path: /home/user/.config/solana/id.json
+Commitment: confirmed
+```
+
+Each field controls a default that commands use when you don't specify it explicitly on the command line.
+
+## Set the RPC URL (cluster)
+
+The `RPC URL` determines which Solana cluster your commands target. Change it with:
+
+```bash
+solana config set --url <RPC_URL>
+```
+
+<Tabs>
+  <Tab title="Devnet">
+    ```bash
+    solana config set --url https://api.devnet.solana.com
+    ```
+  </Tab>
+  <Tab title="Testnet">
+    ```bash
+    solana config set --url https://api.testnet.solana.com
+    ```
+  </Tab>
+  <Tab title="Mainnet Beta">
+    ```bash
+    solana config set --url https://api.mainnet-beta.solana.com
+    ```
+  </Tab>
+  <Tab title="Localhost">
+    ```bash
+    solana config set --url http://localhost:8899
+    ```
+  </Tab>
+</Tabs>
+
+See [Clusters overview](/clusters/overview) for a full description of each network.
+
+## Set the default keypair
+
+The `Keypair Path` is the wallet the CLI uses to sign transactions when you don't provide `--keypair` on the command line. Set it to any keypair file:
+
+```bash
+solana config set --keypair ~/my-solana-wallet/my-keypair.json
+```
+
+<Note>
+  You can always override this default for a single command by passing `--keypair <PATH>` directly on the command line.
+</Note>
+
+## Set the commitment level
+
+Commitment controls how finalized a transaction or account state must be before the CLI accepts it. Valid values are `processed`, `confirmed`, and `finalized`.
+
+```bash
+solana config set --commitment confirmed
+```
+
+| Level | Description |
+|---|---|
+| `processed` | The node has processed the transaction but it may be rolled back. |
+| `confirmed` | A supermajority of the cluster has confirmed the transaction. |
+| `finalized` | The transaction is finalized and will never be rolled back. |
+
+`confirmed` is the default and is appropriate for most development and testing tasks. Use `finalized` when you need the strongest guarantee before taking an action.
+
+## Combine multiple settings in one command
+
+You can set several options at once by chaining flags:
+
+```bash
+solana config set \
+  --url https://api.devnet.solana.com \
+  --keypair ~/my-solana-wallet/my-keypair.json \
+  --commitment confirmed
+```
+
+## Verify your settings
+
+After making changes, confirm they were applied:
+
+```bash
+solana config get
+```
+
+Review the output to ensure each field reflects the values you intended.

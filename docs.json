@@ -1,0 +1,117 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "aspen",
+  "name": "Solana Labs",
+  "logo": {
+    "light": "https://media.brand.dev/352b6de9-8208-4d27-b912-1cf299aa2d51.svg",
+    "dark": "https://media.brand.dev/352b6de9-8208-4d27-b912-1cf299aa2d51.svg"
+  },
+  "favicon": "https://media.brand.dev/6dc496f4-3d20-4708-adaf-46915cbce87c.png",
+  "colors": {
+    "primary": "#d04290",
+    "light": "#6c1588",
+    "dark": "#949c9c"
+  },
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/solana-labs/solana"
+    }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "cli/installation",
+              "cli/wallets",
+              "clusters/overview"
+            ]
+          },
+          {
+            "group": "CLI Usage",
+            "pages": [
+              "cli/configuration",
+              "cli/transfer-tokens",
+              "cli/staking",
+              "cli/deploy-programs",
+              "cli/offline-signing",
+              "cli/durable-nonce"
+            ]
+          },
+          {
+            "group": "Validator Operations",
+            "pages": [
+              "validators/overview",
+              "validators/requirements",
+              "validators/setup",
+              "validators/rpc-node",
+              "validators/best-practices"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/accounts",
+              "concepts/transactions",
+              "concepts/programs",
+              "concepts/clusters",
+              "concepts/staking"
+            ]
+          },
+          {
+            "group": "Plugins & Integrations",
+            "pages": [
+              "plugins/geyser-overview",
+              "plugins/geyser-interface"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "reference/faq",
+              "reference/backwards-compatibility"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "RPC API",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "rpc/introduction",
+              "rpc/http-methods",
+              "rpc/websocket-subscriptions"
+            ]
+          },
+          {
+            "group": "HTTP Methods",
+            "pages": [
+              "rpc/get-account-info",
+              "rpc/get-balance",
+              "rpc/get-block",
+              "rpc/get-transaction",
+              "rpc/send-transaction",
+              "rpc/simulate-transaction"
+            ]
+          },
+          {
+            "group": "WebSocket",
+            "pages": [
+              "rpc/account-subscribe",
+              "rpc/logs-subscribe",
+              "rpc/program-subscribe",
+              "rpc/slot-subscribe"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

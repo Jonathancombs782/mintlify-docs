@@ -1,0 +1,111 @@
+---
+title: "Solana Accounts: Data Storage on the Blockchain"
+description: "Learn how Solana stores all state in accounts — key-value records identified by a 32-byte public key — including fields, rent, ownership, and size limits."
+---
+
+Every piece of state on Solana lives in an **account**. Whether you are storing token balances, program bytecode, or application data, it all maps to an account identified by a 32-byte public key (a `Pubkey`). You can think of the Solana account model as a large key-value store where the key is the public key and the value is the account's fields and associated data buffer.
+
+## Account fields
+
+Every account on Solana carries the following fields, as defined in the SDK's `Account` struct:
+
+| Field | Type | Description |
+|---|---|---|
+| `lamports` | `u64` | The balance of the account, denominated in lamports (1 SOL = 1,000,000,000 lamports). |
+| `data` | `Vec<u8>` | An arbitrary byte array that holds the account's state. For programs, this contains the compiled bytecode. |
+| `owner` | `Pubkey` | The public key of the program that owns this account and is allowed to modify its `data` and `lamports`. |
+| `executable` | `bool` | If `true`, the account contains a program and its `data` is treated as read-only. |
+| `rent_epoch` | `Epoch` | The epoch at which this account will next owe rent. |
+
+```rust
+pub struct Account {
+    pub lamports: u64,
+    pub data: Vec<u8>,
+    pub owner: Pubkey,
+    pub executable: bool,
+    pub rent_epoch: Epoch,
+}
+```
+
+<Note>
+The `owner` field controls which program can write to an account's `data`. Only the owning program can debit lamports or change the data buffer. Any program can credit lamports to any account.
+</Note>
+
+## Rent
+
+Solana charges **rent** to keep accounts alive on-chain. The rent system exists because validators must store every account in memory, and storage has a cost.
+
+The amount of rent owed is proportional to the amount of space the account occupies. Accounts that maintain a lamport balance equal to or greater than **two years' worth of rent** are considered **rent-exempt** and are not charged rent. This is the recommended way to manage accounts — fund them with enough lamports to be rent-exempt so they persist indefinitely.
+
+<Tip>
+When creating a new account, calculate the minimum lamport balance needed for rent exemption and transfer at least that amount. Failing to do so may result in the account being garbage-collected by the runtime.
+</Tip>
+
+You can read the current rent rate from the `Rent` sysvar, which is available at address `SysvarRent111111111111111111111111111111111`.
+
+```rust
+// Reading rent via the sysvar get() API (inside an on-chain program)
+let rent = Rent::get()?;
+let minimum_balance = rent.minimum_balance(data_size);
+```
+
+<Warning>
+If an account's lamport balance falls below the rent-exempt threshold and it is not explicitly marked for exemption, the runtime will eventually reclaim the account. All data in that account will be lost.
+</Warning>
+
+## System accounts vs. program-owned accounts
+
+Accounts fall into two broad categories based on their `owner` field.
+
+<AccordionGroup>
+  <Accordion title="System-owned accounts">
+    Accounts owned by the **System Program** (`11111111111111111111111111111111`) are the simplest kind. They hold SOL and have no custom data beyond what the System Program manages. Wallet addresses are system-owned accounts.
+
+    Only the System Program can create new accounts and assign ownership to other programs.
+  </Accordion>
+  <Accordion title="Program-owned accounts">
+    When you deploy a custom program, that program becomes the owner of any accounts it creates. The program defines the layout of the `data` field and is the only entity that can write to it.
+
+    For example, the SPL Token program owns all token mint accounts and token wallet accounts. It interprets their `data` bytes as mint or balance state.
+  </Accordion>
+  <Accordion title="Executable accounts (programs)">
+    When an account has `executable: true`, the runtime treats its `data` as compiled BPF/SBF bytecode. These accounts are owned by a BPF Loader program and are immutable at runtime — their `data` cannot be changed during transaction execution.
+  </Accordion>
+</AccordionGroup>
+
+## Account size limits
+
+The maximum size of an account's `data` field is **10 MB**. Accounts cannot grow beyond this limit.
+
+When creating an account, you must specify its size up front. You can reallocate account data inside a program using the realloc syscall, but the total size cannot exceed 10 MB and each reallocation is limited to **10,240 bytes (10 KiB)** per invocation.
+
+<Info>
+Program data (bytecode) accounts can be up to 10 MB, but a single transaction cannot deploy more than around 1.2 MB of program data without using the upgradeable BPF loader's incremental deployment mechanism.
+</Info>
+
+## Reading account data
+
+You can fetch an account's current state using the `getAccountInfo` RPC method. The response includes all fields described above, with `data` encoded in Base64 by default.
+
+```bash
+curl https://api.mainnet-beta.solana.com -X POST \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "getAccountInfo",
+    "params": [
+      "vines1vzrYbzLMRdu58ou5XTby4qAqVRLmqo36NKPTg",
+      { "encoding": "base64" }
+    ]
+  }'
+```
+
+<CardGroup cols={2}>
+  <Card title="Transactions" icon="arrow-right-arrow-left" href="/concepts/transactions">
+    Learn how accounts are read and written during transaction execution.
+  </Card>
+  <Card title="Programs" icon="code" href="/concepts/programs">
+    Understand how on-chain programs own and modify accounts.
+  </Card>
+</CardGroup>

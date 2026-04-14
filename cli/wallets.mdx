@@ -1,0 +1,151 @@
+---
+title: "Create and Manage Solana Wallets"
+description: "Create file system, paper, and hardware wallets using the Solana CLI. Generate keypairs, recover from a seed phrase, and view your public key."
+---
+
+A Solana wallet stores the keypairs that give you control over your accounts and tokens. The Solana CLI supports three wallet types: file system wallets for everyday development use, paper wallets for high-security cold storage, and hardware wallets for a blend of security and convenience. Before creating a wallet, make sure you have [installed the Solana CLI tools](/cli/installation).
+
+## File system wallets
+
+A file system wallet stores your keypair as a JSON file on disk. It is the most convenient option for development and testing because you can reference it directly by path.
+
+<Warning>
+  File system wallets store keypairs **unencrypted**. Anyone with access to the file has full control over the associated tokens. Do not use a file system wallet to store significant amounts of SOL on a shared or internet-connected machine.
+</Warning>
+
+### Generate a keypair
+
+```bash
+mkdir ~/my-solana-wallet
+solana-keygen new --outfile ~/my-solana-wallet/my-keypair.json
+```
+
+The tool prompts you for an optional passphrase (which protects the recovery seed phrase, not the file itself), then writes the keypair to the path you specified and displays a seed phrase. Store the seed phrase somewhere safe — it is the only way to recover the keypair if the file is lost.
+
+### View your wallet address
+
+Your wallet address is the public key of your keypair. Display it with:
+
+```bash
+solana-keygen pubkey ~/my-solana-wallet/my-keypair.json
+```
+
+Output:
+
+```text
+ErRr1caKzK8L8nn4xmEWtimYRiTCAZXjBtVphuZ5vMKy
+```
+
+### Verify your keypair
+
+To confirm that a given public key matches your keypair file:
+
+```bash
+solana-keygen verify <PUBKEY> ~/my-solana-wallet/my-keypair.json
+```
+
+Replace `<PUBKEY>` with your wallet address. The command prints `Success` if the address matches.
+
+### Create additional wallets
+
+You can generate as many keypairs as you like by re-running `solana-keygen new` with a different `--outfile` path each time. Multiple addresses are useful for separating funds across different purposes.
+
+## Paper wallets
+
+A paper wallet derives your keypair from a seed phrase (typically 12 or 24 words) each time you need to sign. The private key never touches disk, making it suitable for long-term cold storage.
+
+<Info>
+  Even with a paper wallet, private keys may briefly pass through RAM. Protect against memory-swap attacks by using an air-gapped machine for critical operations.
+</Info>
+
+### Generate a seed phrase
+
+Run the following command to generate a new seed phrase without writing a keypair file to disk:
+
+```bash
+solana-keygen new --no-outfile
+```
+
+The output includes your public key and a seed phrase:
+
+```text
+pubkey: 9ZNTfG4NyQgxy2SWjSiQoUyBPEvXT2xo7fKc5hPYYJ7b
+```
+
+Write the seed phrase down on paper and store it securely. Do not store it digitally. For a stronger wallet, use the `--word-count` argument to increase the number of words.
+
+<Tip>
+  For full options, run `solana-keygen new --help`.
+</Tip>
+
+### Derive your public key from a seed phrase
+
+To obtain your wallet address from a seed phrase without creating a file, use the `prompt://` URI scheme:
+
+```bash
+solana-keygen pubkey prompt://
+```
+
+The tool prompts you to enter your seed phrase and optional passphrase, then prints your wallet address. You can copy this address to a USB drive and use it on a networked machine without ever exposing the private key.
+
+<Note>
+  Each unique passphrase combined with the same seed phrase produces a different keypair. Keep track of which passphrase (including "no passphrase") you used when creating your wallet.
+</Note>
+
+### Hierarchical derivation
+
+The Solana CLI supports BIP32/BIP44 derivation paths. To derive a child key, append a `?key=` query string to the `prompt://` URI:
+
+```bash
+solana-keygen pubkey prompt://?key=0/1
+```
+
+To use a fully custom derivation path:
+
+```bash
+solana-keygen pubkey prompt://?full-path=m/44/2017/0/1
+```
+
+### Verify a paper wallet
+
+To confirm that a seed phrase controls a given address:
+
+```bash
+solana-keygen verify <PUBKEY> prompt://
+```
+
+Replace `<PUBKEY>` with the wallet address. Enter your seed phrase when prompted; the command prints `Success` if the address matches.
+
+### Check your balance
+
+Once you have your public key, check its balance from any networked machine:
+
+```bash
+solana balance <PUBKEY>
+```
+
+## Hardware wallets
+
+A hardware wallet such as a [Ledger](https://www.ledger.com/) device stores keypairs on dedicated secure hardware and signs transactions on-device. The private key never leaves the hardware.
+
+To reference a hardware wallet in CLI commands, use the device URI:
+
+```bash
+solana-keygen pubkey usb://ledger?key=0
+```
+
+Substitute `usb://ledger?key=0` wherever a `<KEYPAIR>` argument is required in other CLI commands.
+
+<Tip>
+  Hardware wallets offer the best balance of security and day-to-day usability. For large amounts of SOL, prefer a hardware wallet over file system or paper wallets.
+</Tip>
+
+## Keypair conventions
+
+When CLI commands show a `<KEYPAIR>` placeholder, substitute it based on your wallet type:
+
+| Wallet type | Value to use |
+|---|---|
+| File system | Path to the JSON file, e.g. `~/my-solana-wallet/my-keypair.json` |
+| Paper | `prompt://` (the CLI will prompt for your seed phrase) |
+| Hardware | Device URI, e.g. `usb://ledger?key=0` |

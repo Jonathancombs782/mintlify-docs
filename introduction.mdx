@@ -1,0 +1,53 @@
+---
+title: "Solana: Web-Scale Blockchain for Decentralized Apps"
+description: "Solana is a high-performance, permissionless blockchain for building fast, secure, and scalable decentralized applications and digital marketplaces."
+---
+
+Solana is a blockchain network engineered for mass adoption. It processes thousands of transactions per second with sub-second finality, making it one of the fastest public blockchains available. Whether you're building a DeFi protocol, launching an NFT marketplace, writing on-chain programs, or running a validator node, this documentation covers everything you need to get started and operate on Solana.
+
+<CardGroup cols={2}>
+  <Card title="Install the CLI" icon="terminal" href="/cli/installation">
+    Set up the Solana CLI tools on your machine to start interacting with the network.
+  </Card>
+  <Card title="Create a Wallet" icon="wallet" href="/cli/wallets">
+    Generate a keypair and create your first Solana wallet to send and receive SOL.
+  </Card>
+  <Card title="Choose a Cluster" icon="network-wired" href="/clusters/overview">
+    Connect to Devnet for testing, Testnet for staging, or Mainnet Beta for production.
+  </Card>
+  <Card title="RPC API Reference" icon="code" href="/rpc/introduction">
+    Query blockchain state, submit transactions, and subscribe to real-time events.
+  </Card>
+</CardGroup>
+
+## What you can do with Solana
+
+Solana supports a broad range of use cases. Here's where to start based on your goals:
+
+<CardGroup cols={2}>
+  <Card title="Send & Receive SOL" icon="arrow-right-arrow-left" href="/cli/transfer-tokens">
+    Transfer tokens using the CLI or programmatically via the JSON RPC API.
+  </Card>
+  <Card title="Stake SOL" icon="coins" href="/cli/staking">
+    Delegate your SOL to a validator to earn staking rewards and secure the network.
+  </Card>
+  <Card title="Deploy Programs" icon="upload" href="/cli/deploy-programs">
+    Build and deploy on-chain programs (smart contracts) to Solana clusters.
+  </Card>
+  <Card title="Run a Validator" icon="server" href="/validators/overview">
+    Operate a validator node and participate in network consensus.
+  </Card>
+</CardGroup>
+
+## Key features
+
+- **High throughput** — Solana uses a unique Proof of History (PoH) mechanism alongside Proof of Stake to achieve thousands of transactions per second.
+- **Low fees** — Transaction fees are a fraction of a cent, making micropayments and high-frequency applications viable.
+- **Permissionless** — Anyone can deploy programs, run a validator, or build applications without requiring approval.
+- **Multiple clusters** — Use Devnet for development, Testnet for stress testing, and Mainnet Beta for production.
+- **Composable programs** — On-chain programs can call one another via cross-program invocations (CPI), enabling rich application composition.
+- **Geyser plugins** — Stream account, transaction, and block data to external databases for scalable data indexing.
+
+<Note>
+  Looking for the JavaScript/TypeScript SDK? See the [@solana/web3.js library](https://github.com/solana-labs/solana-web3.js) for client-side development.
+</Note>

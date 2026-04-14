@@ -1,0 +1,121 @@
+---
+title: "Hardware and Staking Requirements for Validators"
+description: "Recommended CPU, RAM, disk, and network specs for running a Solana validator, plus the SOL needed for a vote account and daily fees."
+---
+
+Before you provision hardware or choose a hosting provider, review the specifications below. Meeting these requirements gives your validator a realistic chance of keeping up with the Solana cluster and earning rewards. Falling short — even in one dimension — can cause your node to fall behind, miss votes, and become delinquent.
+
+## Minimum SOL requirements
+
+There is no enforced minimum SOL balance to run a validator, but you need SOL for two purposes:
+
+- **Vote account rent-exempt reserve** — `0.02685864 SOL` must be locked in your vote account when it is created.
+- **Voting fees** — each vote is an on-chain transaction. Fees can reach up to **1.1 SOL per day** when the network is active.
+
+<Warning>
+  If your identity account is depleted, your validator stops voting immediately. Keep a buffer well above the daily voting cost and monitor the balance with `solana-watchtower`.
+</Warning>
+
+## Hardware recommendations
+
+The figures below are community-tested guidelines. You are encouraged to run your own performance tests.
+
+### CPU
+
+| Requirement | Minimum |
+|---|---|
+| Cores / threads | 12 cores / 24 threads |
+| Base clock | 2.8 GHz or faster |
+| SHA extensions | AMD Gen 3+ or Intel Ice Lake+ |
+| AVX2 instructions | Required for prebuilt binaries |
+| AVX512f | Helpful but not required |
+
+<Info>
+  If you build `solana-validator` from source you can target your exact CPU microarchitecture with `-march=native`, which removes the AVX2 requirement for prebuilt binaries and can improve performance.
+</Info>
+
+### RAM
+
+| Requirement | Recommendation |
+|---|---|
+| Installed RAM | 256 GB or more |
+| Memory type | ECC (Error Correction Code) strongly suggested |
+| Motherboard capacity | 512 GB capacity suggested for future growth |
+
+### Disk
+
+Accounts data and ledger data have very different I/O profiles. Storing them on separate NVMe drives measurably improves performance.
+
+| Volume | Size | Notes |
+|---|---|---|
+| Accounts | 500 GB+ | High TBW NVMe. Samsung 970 or 980 Pro popular in the community. |
+| Ledger | 1 TB+ | High TBW NVMe. Can house the OS if a third drive is unavailable, but a dedicated disk is better. |
+| OS | 500 GB+ (optional) | SATA SSD is acceptable. |
+
+<Note>
+  Accounts and ledger *can* share a single disk, but the combined IOPS demand makes this a poor choice in practice.
+</Note>
+
+### GPUs
+
+GPUs are **not required** and are not used by current validator software. Do not factor GPU cost into your hardware budget.
+
+### Networking
+
+- **Minimum:** 1 Gbit/s symmetric commercial-grade connection
+- **Recommended:** 10 Gbit/s
+
+Running behind NAT is not recommended. If you do, you are responsible for debugging any port-forwarding issues that arise.
+
+#### Required open ports
+
+| Ports | Protocol | Purpose |
+|---|---|---|
+| 8000–10000 | TCP/UDP | P2P (gossip, turbine, repair). Narrowable with `--dynamic-port-range` down to any 13-port range. |
+
+#### Optional ports (not recommended on mainnet-beta staked validators)
+
+| Port | Protocol | Purpose |
+|---|---|---|
+| 8899 | TCP | JSON-RPC over HTTP. Configurable with `--rpc-port`. |
+| 8900 | TCP | JSON-RPC over WebSocket. Always `RPC_PORT + 1`. |
+
+<Warning>
+  Exposing RPC ports on a staked mainnet-beta validator is a security risk. Use a separate RPC node for external API traffic.
+</Warning>
+
+## Software
+
+- **OS:** Ubuntu 20.04 (recommended and officially supported)
+- **Binaries:** Prebuilt Linux x86_64 binaries require AVX2. macOS and WSL users must build from source.
+
+## RPC node adjustments
+
+If you plan to run an RPC node rather than a consensus validator, treat the hardware recommendations above as minimums and apply the following upgrades:
+
+| Component | RPC-specific requirement |
+|---|---|
+| CPU | 16 cores / 32 threads or more |
+| RAM | 512 GB or more when `--account-index` is used |
+| Ledger disk | Larger if long transaction history is required |
+| Accounts / ledger | Must be on separate disks |
+
+## Virtual machines and cloud hosting
+
+Cloud VMs can be convenient for non-voting RPC nodes used internally by exchanges and services. For staked consensus validators, cloud hosting tends to be cost-inefficient over the long term due to egress traffic charges.
+
+If you use a cloud VM, the Solana Foundation team ran mainnet-beta validators on GCE `n2-standard-32` instances (32 vCPUs, 128 GB RAM, 2 TB SSD) as of early 2021. Select comparable instance types on other platforms.
+
+## Docker
+
+Running a live validator inside Docker is **not recommended and not supported** due to containerization overhead and performance degradation. Docker images are published at [solanalabs/solana](https://hub.docker.com/r/solanalabs/solana) for development use only.
+
+## Data center vs. home setup
+
+Home setups are suitable for learning and testnet experimentation. Before running on mainnet-beta, consider:
+
+- **Consistency** — most residential ISPs do not provide the stable low-latency connectivity a staked validator needs.
+- **Redundancy** — data centers offer redundant power, cooling, and connectivity that home setups cannot easily match.
+- **Physical security** — servers in data centers are protected against theft, fire, and flooding.
+
+The Solana Foundation facilitates data-center server rentals through the [Solana server program](https://solana.foundation/server-program) for operators who need help sourcing hardware.

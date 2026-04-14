@@ -1,0 +1,307 @@
+---
+title: "Geyser Plugin Interface Reference"
+description: "Full reference for the GeyserPlugin Rust trait: every method your plugin must or may implement, its parameters, and when the validator invokes each callback."
+---
+
+The Geyser plugin interface is a Rust trait declared in the `solana-geyser-plugin-interface` crate. To build a working plugin you implement the `GeyserPlugin` trait in a Rust dynamic library, export a C-compatible `_create_plugin` entry point, and compile the result as a `.so` shared library. The validator loads that library at startup and drives your implementation through callbacks as accounts change, slots progress, and transactions execute.
+
+## Implementing the trait
+
+Your plugin struct must implement `GeyserPlugin`, which requires `Any + Send + Sync + std::fmt::Debug`:
+
+```rust
+pub trait GeyserPlugin: Any + Send + Sync + std::fmt::Debug {
+    // required
+    fn name(&self) -> &'static str;
+
+    // optional — all have default no-op implementations
+    fn setup_logger(&self, logger: &'static dyn log::Log, level: log::LevelFilter) -> Result<()>;
+    fn on_load(&mut self, _config_file: &str, _is_reload: bool) -> Result<()>;
+    fn on_unload(&mut self);
+    fn update_account(&self, account: ReplicaAccountInfoVersions, slot: Slot, is_startup: bool) -> Result<()>;
+    fn notify_end_of_startup(&self) -> Result<()>;
+    fn update_slot_status(&self, slot: Slot, parent: Option<u64>, status: SlotStatus) -> Result<()>;
+    fn notify_transaction(&self, transaction: ReplicaTransactionInfoVersions, slot: Slot) -> Result<()>;
+    fn notify_entry(&self, entry: ReplicaEntryInfoVersions) -> Result<()>;
+    fn notify_block_metadata(&self, blockinfo: ReplicaBlockInfoVersions) -> Result<()>;
+    fn account_data_notifications_enabled(&self) -> bool;
+    fn transaction_notifications_enabled(&self) -> bool;
+    fn entry_notifications_enabled(&self) -> bool;
+}
+```
+
+## C FFI entry point
+
+Every plugin library must export a `_create_plugin` function using the C calling convention. The validator calls this function immediately after loading the shared library to obtain a pointer to your `GeyserPlugin` implementation.
+
+```rust
+#[no_mangle]
+#[allow(improper_ctypes_definitions)]
+/// # Safety
+///
+/// This function returns the GeyserPluginPostgres pointer as trait GeyserPlugin.
+pub unsafe extern "C" fn _create_plugin() -> *mut dyn GeyserPlugin {
+    let plugin = GeyserPluginPostgres::new();
+    let plugin: Box<dyn GeyserPlugin> = Box::new(plugin);
+    Box::into_raw(plugin)
+}
+```
+
+<Warning>
+  Omitting `_create_plugin` or failing to mark it `#[no_mangle]` will cause the validator to fail to load your library with a symbol-not-found error at startup.
+</Warning>
+
+## Lifecycle methods
+
+### `on_load`
+
+```rust
+fn on_load(&mut self, _config_file: &str, _is_reload: bool) -> Result<()> {
+    Ok(())
+}
+```
+
+Called once immediately after the library is dynamically loaded. Use this method to read your JSON5 configuration file (whose path is provided as `_config_file`), open database connections, initialize thread pools, or perform any other one-time setup. The `_is_reload` flag is `true` when the plugin is being hot-reloaded rather than loaded fresh.
+
+Return `Err(GeyserPluginError::ConfigFileReadError { ... })` to abort startup if configuration is invalid.
+
+### `on_unload`
+
+```rust
+fn on_unload(&mut self) {}
+```
+
+Called right before the plugin is unloaded during a graceful validator shutdown. Use this method to flush pending writes, close database connections, and join background threads. Errors cannot be propagated from this method — perform any critical cleanup synchronously before returning.
+
+### `setup_logger`
+
+```rust
+fn setup_logger(&self, logger: &'static dyn log::Log, level: log::LevelFilter) -> Result<()> {
+    Ok(())
+}
+```
+
+Invoked first, before any other callback, so your plugin can adopt the validator's logger and log level. Call `log::set_logger` and `log::set_max_level` here to route your plugin's log output through the validator's logging infrastructure.
+
+## Data streaming methods
+
+### `update_account`
+
+```rust
+fn update_account(
+    &self,
+    account: ReplicaAccountInfoVersions,
+    slot: Slot,
+    is_startup: bool,
+) -> Result<()> {
+    Ok(())
+}
+```
+
+Called whenever an account is updated. The `account` parameter is a versioned enum — match on it to extract the concrete account data:
+
+```rust
+pub enum ReplicaAccountInfoVersions<'a> {
+    V0_0_1(&'a ReplicaAccountInfo<'a>),
+    V0_0_2(&'a ReplicaAccountInfoV2<'a>),
+    V0_0_3(&'a ReplicaAccountInfoV3<'a>),
+}
+```
+
+The most recent version, `V0_0_3`, carries a reference to the `SanitizedTransaction` that caused the update:
+
+```rust
+pub struct ReplicaAccountInfoV3<'a> {
+    /// The Pubkey for the account
+    pub pubkey: &'a [u8],
+    /// The lamports for the account
+    pub lamports: u64,
+    /// The Pubkey of the owner program account
+    pub owner: &'a [u8],
+    /// This account's data contains a loaded program (and is now read-only)
+    pub executable: bool,
+    /// The epoch at which this account will next owe rent
+    pub rent_epoch: u64,
+    /// The data held in this account.
+    pub data: &'a [u8],
+    /// A global monotonically increasing atomic number, which can be used
+    /// to tell the order of the account update.
+    pub write_version: u64,
+    /// Reference to transaction causing this account modification
+    pub txn: Option<&'a SanitizedTransaction>,
+}
+```
+
+**Parameters:**
+
+| Parameter | Description |
+|---|---|
+| `account` | Versioned account metadata and data. |
+| `slot` | The slot at which the account was updated. |
+| `is_startup` | `true` when replaying from the snapshot at startup; `false` during live transaction processing. |
+
+<Warning>
+  During live transaction processing (`is_startup = false`), this callback is on the critical path. Any delay here can cause the validator to fall behind the network. Persist data asynchronously — write to an in-memory queue and drain it on a background thread.
+</Warning>
+
+### `notify_end_of_startup`
+
+```rust
+fn notify_end_of_startup(&self) -> Result<()> {
+    Ok(())
+}
+```
+
+Called once after all accounts have been delivered via `update_account` during the initial snapshot replay. Use this as a signal to flush bulk-insert buffers, commit a transaction, or switch from batch-write mode to single-row-write mode for live updates.
+
+### `update_slot_status`
+
+```rust
+fn update_slot_status(
+    &self,
+    slot: Slot,
+    parent: Option<u64>,
+    status: SlotStatus,
+) -> Result<()> {
+    Ok(())
+}
+```
+
+Called whenever a slot changes state. The `SlotStatus` enum covers the three progression states:
+
+```rust
+pub enum SlotStatus {
+    /// Highest slot of the heaviest fork processed by the node.
+    Processed,
+    /// Highest slot having reached max vote lockout.
+    Rooted,
+    /// Highest slot voted on by supermajority of the cluster.
+    Confirmed,
+}
+```
+
+**Parameters:**
+
+| Parameter | Description |
+|---|---|
+| `slot` | The slot number whose status changed. |
+| `parent` | The parent slot number, if available. |
+| `status` | The new status: `Processed`, `Confirmed`, or `Rooted`. |
+
+Use slot status callbacks to implement consistency guarantees in your store — for example, only exposing data in your read API once a slot reaches `Confirmed` or `Rooted`.
+
+### `notify_transaction`
+
+```rust
+fn notify_transaction(
+    &self,
+    transaction: ReplicaTransactionInfoVersions,
+    slot: Slot,
+) -> Result<()> {
+    Ok(())
+}
+```
+
+Called for each transaction processed in a slot. This callback is only invoked if `transaction_notifications_enabled` returns `true`. The `transaction` parameter is a versioned enum:
+
+```rust
+pub enum ReplicaTransactionInfoVersions<'a> {
+    V0_0_1(&'a ReplicaTransactionInfo<'a>),
+    V0_0_2(&'a ReplicaTransactionInfoV2<'a>),
+}
+```
+
+`ReplicaTransactionInfoV2` extends the base struct with the transaction's index within the block:
+
+```rust
+pub struct ReplicaTransactionInfoV2<'a> {
+    /// The first signature of the transaction, used for identifying the transaction.
+    pub signature: &'a Signature,
+    /// Indicates if the transaction is a simple vote transaction.
+    pub is_vote: bool,
+    /// The sanitized transaction.
+    pub transaction: &'a SanitizedTransaction,
+    /// Metadata of the transaction status.
+    pub transaction_status_meta: &'a TransactionStatusMeta,
+    /// The transaction's index in the block
+    pub index: usize,
+}
+```
+
+**Parameters:**
+
+| Parameter | Description |
+|---|---|
+| `transaction` | Versioned transaction data including signature, vote flag, sanitized transaction, and status metadata. |
+| `slot` | The slot in which the transaction was executed. |
+
+For full details on `SanitizedTransaction` and `TransactionStatusMeta`, refer to the [`solana-sdk`](https://docs.rs/solana-sdk) and [`solana-transaction-status`](https://docs.rs/solana-transaction-status) crates.
+
+### `notify_block_metadata`
+
+```rust
+fn notify_block_metadata(&self, blockinfo: ReplicaBlockInfoVersions) -> Result<()> {
+    Ok(())
+}
+```
+
+Called when a block's metadata is finalized. Useful for recording block rewards, blockhashes, and timing information. The versioned enum currently offers three variants; the most complete is `V0_0_3`:
+
+```rust
+pub struct ReplicaBlockInfoV3<'a> {
+    pub parent_slot: Slot,
+    pub parent_blockhash: &'a str,
+    pub slot: Slot,
+    pub blockhash: &'a str,
+    pub rewards: &'a [Reward],
+    pub block_time: Option<UnixTimestamp>,
+    pub block_height: Option<u64>,
+    pub executed_transaction_count: u64,
+    pub entry_count: u64,
+}
+```
+
+### `notify_entry`
+
+```rust
+fn notify_entry(&self, entry: ReplicaEntryInfoVersions) -> Result<()> {
+    Ok(())
+}
+```
+
+Called for each entry executed within a block. Only invoked when `entry_notifications_enabled` returns `true`. Entries carry the PoH hash, the number of hashes since the previous entry, and a count of executed transactions.
+
+## Capability flags
+
+These methods control which callbacks the validator delivers to your plugin. Override them to opt in to specific data streams.
+
+| Method | Default | Purpose |
+|---|---|---|
+| `account_data_notifications_enabled` | `true` | Receive `update_account` callbacks. Return `false` if your plugin only handles transactions. |
+| `transaction_notifications_enabled` | `false` | Receive `notify_transaction` callbacks. Return `true` to opt in. |
+| `entry_notifications_enabled` | `false` | Receive `notify_entry` callbacks. Return `true` to opt in. |
+
+## Error handling
+
+All streaming callbacks return `Result<()>` where the error type is `GeyserPluginError`:
+
+```rust
+pub enum GeyserPluginError {
+    ConfigFileOpenError(#[from] io::Error),
+    ConfigFileReadError { msg: String },
+    AccountsUpdateError { msg: String },
+    SlotStatusUpdateError { msg: String },
+    TransactionUpdateError { msg: String },
+    Custom(Box<dyn error::Error + Send + Sync>),
+}
+```
+
+<Note>
+  Returning an error from a streaming callback does not automatically stop the validator. If data consistency requires the validator to halt on write failure, set `panic_on_db_errors: true` in your configuration or call `panic!` explicitly inside your error handler. When the validator restarts it will re-transmit account data from the latest snapshot.
+</Note>
+
+## Further reading
+
+- [`solana-geyser-plugin-interface` on docs.rs](https://docs.rs/solana-geyser-plugin-interface)
+- [`solana-accountsdb-plugin-postgres` on docs.rs](https://docs.rs/solana-accountsdb-plugin-postgres) — reference implementation
+- [Geyser plugin overview](/plugins/geyser-overview) — configuration, filtering, and performance guidance

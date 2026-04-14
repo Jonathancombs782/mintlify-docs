@@ -1,0 +1,135 @@
+---
+title: "Solana API Stability and Backwards Compatibility"
+description: "Solana uses semantic versioning with stable, beta, and edge channels. Learn what is guaranteed stable, how deprecations work, and how to track releases."
+---
+
+As the Solana developer ecosystem grows, so does the need for clear expectations around breaking API and behavior changes that affect applications and tooling built on Solana. This page explains which interfaces are covered by a compatibility guarantee, how the release cadence maps to different kinds of changes, and how to stay current.
+
+## Semantic versioning
+
+Solana software releases follow [semantic versioning](https://semver.org/). The version format is `MAJOR.MINOR.PATCH`:
+
+| Component | Example | Meaning |
+|---|---|---|
+| `MAJOR` | `2.0.0` | May contain breaking changes and removal of deprecated features. |
+| `MINOR` | `1.4.0` | New features added in a backwards-compatible way. |
+| `PATCH` | `1.0.11` | Bug fixes, security fixes, and low-risk non-breaking changes. |
+
+Software within the same `MAJOR` version is compatible across all `MINOR` and `PATCH` releases. You can upgrade from `1.3.x` to `1.4.x` without expecting breaking changes; upgrading from `1.x` to `2.0` may require code changes.
+
+## Release channels
+
+| Channel | Cluster | Description |
+|---|---|---|
+| `stable` | Mainnet Beta, Devnet | Production-ready software with full backwards-compatibility guarantees. |
+| `beta` | Testnet | New `MINOR` versions under validation. No backwards-compatibility guarantee relative to `edge`. |
+| `edge` | — | Cutting-edge features with no compatibility policy. Used for internal development. |
+
+New features are always introduced in a `MINOR` release, run on Testnet in the `beta` channel, and promoted to `stable` only after being patched and proven reliable.
+
+## Deprecation process
+
+<Steps>
+  <Step title="Feature is marked deprecated">
+    In any `PATCH` or `MINOR` release, a feature, API endpoint, or CLI argument may be marked as deprecated. Deprecation notices appear in the changelog, in `--help` output (for CLI), and as `#[deprecated]` attributes in Rust code.
+  </Step>
+  <Step title="Deprecated feature remains available">
+    Deprecated features continue to work for some number of release cycles. The exact timeline depends on how difficult it is for users to migrate. Deprecation notices specify the recommended replacement.
+  </Step>
+  <Step title="Removal in a major release">
+    In a future `MAJOR` version release, deprecated features are removed in an incompatible way. The major version bump is your signal to review the migration guide before upgrading.
+  </Step>
+</Steps>
+
+## JSON RPC API
+
+The JSON RPC API is the primary interface for querying blockchain state and submitting transactions. It is versioned alongside Solana software releases.
+
+| Release type | Changes included |
+|---|---|
+| `PATCH` | Bug fixes, security fixes, endpoint/feature deprecation |
+| `MINOR` | New RPC endpoints and features |
+| `MAJOR` | Removal of deprecated endpoints and features |
+
+<Note>
+  Solana provides publicly available RPC nodes for all developers to use. The Solana team makes a best effort to communicate changes to host, port, rate-limiting behavior, and availability in advance. However, Solana recommends that you run your own RPC node for production applications rather than depending on the public endpoints.
+</Note>
+
+## CLI tools
+
+The `solana` CLI is shipped with each software release.
+
+| Release type | Changes included |
+|---|---|
+| `PATCH` | Bug fixes, security fixes, performance improvements, subcommand/argument deprecation |
+| `MINOR` | New subcommands |
+| `MAJOR` | Switch to new RPC API endpoints introduced in the previous major version; removal of deprecated features |
+
+<Info>
+  JSON output from the CLI (`--output json`) is considered stable and its format is preserved across releases. Human-readable output — including help text, warnings, and error messages — may change at any time and should not be parsed programmatically.
+</Info>
+
+## Rust SDK crates
+
+The following crates are versioned and released alongside Solana software:
+
+| Crate | Purpose |
+|---|---|
+| [`solana-sdk`](https://docs.rs/solana-sdk/) | Creating transactions and parsing account state |
+| [`solana-program`](https://docs.rs/solana-program/) | Writing on-chain programs |
+| [`solana-client`](https://docs.rs/solana-client/) | Connecting to the RPC API from Rust |
+| [`solana-cli-config`](https://docs.rs/solana-cli-config/) | Managing Solana CLI configuration files |
+| [`solana-geyser-plugin-interface`](https://docs.rs/solana-geyser-plugin-interface/) | Developing Geyser plugins |
+
+| Release type | Changes included |
+|---|---|
+| `PATCH` | Bug fixes, security fixes, performance improvements |
+| `MINOR` | New APIs |
+| `MAJOR` | Removal of deprecated APIs; backwards-incompatible behavior changes |
+
+## Runtime features
+
+New Solana runtime features — including new native programs, sysvars, and syscalls — are feature-gated and activated manually, not automatically on deployment. This allows validators on Testnet to build confidence before a feature is activated on Mainnet Beta.
+
+<Steps>
+  <Step title="Feature ships disabled">
+    A new runtime feature is included in a release but deactivated by default. Validators can upgrade without the feature taking effect.
+  </Step>
+  <Step title="Sufficient stake upgrades">
+    Once enough staked validators have upgraded to the release containing the feature, the feature switch can be activated via an on-chain instruction.
+  </Step>
+  <Step title="Feature activates at epoch boundary">
+    The feature takes effect at the start of the next epoch after activation, ensuring a clean, predictable transition.
+  </Step>
+</Steps>
+
+## Infrastructure changes
+
+Breaking changes to local cluster scripts and Docker images are limited to `MAJOR` version updates. `MINOR` and `PATCH` updates are always backwards compatible for these resources.
+
+## Exceptions
+
+### Web3 JavaScript SDK
+
+The `@solana/web3.js` JavaScript SDK follows semantic versioning but is shipped and versioned separately from the core Solana software release. Check the [npm package changelog](https://www.npmjs.com/package/@solana/web3.js) for its own compatibility notes.
+
+### Security vulnerabilities
+
+If a critical security vulnerability is discovered, the above deprecation and release process may be bypassed to deploy a fix as quickly as possible. The severity of the issue determines whether advance notice is possible.
+
+## Staying current
+
+<AccordionGroup>
+  <Accordion title="Subscribe to release announcements">
+    Follow the [Solana GitHub releases page](https://github.com/solana-labs/solana/releases) or the `#announcements` channel in the Solana Discord to be notified of new releases, deprecations, and migration guides.
+  </Accordion>
+  <Accordion title="Pin to a minor version in production">
+    In production, pin your dependencies to a specific `MINOR` version (e.g., `~1.14`) rather than using a wildcard. Upgrade to new minor versions in a staging environment first and verify compatibility before promoting to production.
+  </Accordion>
+  <Accordion title="Watch for deprecation warnings in CI">
+    Solana Rust crates emit `#[deprecated]` attributes on deprecated items. Enable `-D warnings` in your CI pipeline to catch uses of deprecated APIs early, giving you time to migrate before the next major release.
+  </Accordion>
+  <Accordion title="Test against Testnet before Mainnet">
+    The Testnet cluster runs `beta` channel software — the same code that will become the next `stable` release. Test your application against Testnet after each Solana `MINOR` release to catch any compatibility issues before they reach Mainnet Beta.
+  </Accordion>
+</AccordionGroup>

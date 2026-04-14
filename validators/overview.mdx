@@ -1,0 +1,83 @@
+---
+title: "What Is a Solana Validator?"
+description: "Validators power Solana's Proof of Stake consensus, earn inflation rewards and transaction fees, and can run as voting nodes or non-voting RPC nodes."
+---
+
+A validator is a computer that runs the Solana software and keeps track of all accounts on the network. Each validator executes and votes on transactions, and without validators the Solana cluster cannot function. By running a validator, you help secure and decentralize the network while earning inflation rewards proportional to the stake delegated to your node.
+
+## Voting vs. non-voting nodes
+
+The same `solana-validator` binary powers both roles, but they serve distinct purposes:
+
+- **Consensus (voting) validator** — participates in block production and voting. Your vote share is proportional to the amount of SOL staked to your vote account. The more stake you attract, the more blocks you produce and the more rewards you and your delegators earn.
+- **RPC node** — does not vote. Instead, it answers API requests and forwards signed transactions to the leader. Running both roles on a single machine is strongly discouraged because neither task will perform well under the combined load.
+
+<Note>
+  For this page, "validator" refers specifically to a voting/consensus node. See [Run a Solana RPC Node](/validators/rpc-node) if you want to provide API access instead.
+</Note>
+
+## How consensus works
+
+Solana uses **Proof of Stake** (PoS) combined with **Proof of History** (PoH). Token holders stake SOL to a validator of their choice to signal trust. Staked tokens are never transferred to the validator — holders retain ownership and can remove the delegation at any time.
+
+A validator's weight in the protocol is proportional to its total delegated stake. The validator currently producing blocks is called the **leader**, and the leader schedule rotates among all staked validators. When your validator successfully votes on a block that is added to the chain, it earns **vote credits**, which are converted to inflation rewards at the end of each epoch.
+
+## How validators earn rewards
+
+A voting validator earns SOL through two mechanisms:
+
+1. **Inflation rewards** — distributed at the end of each epoch based on vote credits accumulated during the epoch.
+2. **Transaction fees** — the validator earns 50% of the transaction fees for every block it produces as the leader. The remaining 50% is burned.
+
+Voting itself is not free. Each vote is an on-chain transaction, and the fees amount to approximately **1.0–1.1 SOL per day**. Your identity account must always hold enough SOL to cover these costs, or your node will stop voting.
+
+<Warning>
+  If your identity account runs out of SOL, your validator goes delinquent and stops earning rewards. Monitor your balance and top it up regularly.
+</Warning>
+
+## Commission
+
+When you create your vote account you set a **commission** — the percentage of epoch rewards deposited into your vote account. The remainder flows to your delegators' stake accounts. A lower commission attracts more delegations; a higher commission retains more revenue for your operations.
+
+Commission can only be updated during the first half of an epoch, which prevents last-minute changes before reward distribution.
+
+## Your responsibilities as an operator
+
+Running a validator is a commitment, not a set-and-forget task. You are expected to:
+
+- Keep your system online and performing well
+- Upgrade the `solana-validator` binary promptly when new releases ship
+- Secure your keypairs and server
+- Respond to incidents at any time of day
+- Communicate transparently with your delegators
+
+<Tip>
+  A team of people — covering operations, security, and communications — makes it much easier to maintain high uptime and attract stake delegations.
+</Tip>
+
+## Consensus validator vs. RPC node at a glance
+
+| | Consensus validator | RPC node |
+|---|---|---|
+| Participates in voting | Yes | No |
+| Earns inflation rewards | Yes | No |
+| Serves JSON-RPC API | Optional (not recommended) | Yes |
+| Primary audience | Delegators / the network | Developers / applications |
+| Requires vote account | Yes | No |
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Hardware and staking requirements" icon="server" href="/validators/requirements">
+    Check the CPU, RAM, disk, and network specs your machine needs before you begin.
+  </Card>
+  <Card title="Set up your first validator" icon="play" href="/validators/setup">
+    Step-by-step guide to installing the CLI, creating keypairs, and connecting to testnet.
+  </Card>
+  <Card title="Run an RPC node" icon="network-wired" href="/validators/rpc-node">
+    Learn how to configure your node for API access instead of consensus voting.
+  </Card>
+  <Card title="Best practices" icon="shield-check" href="/validators/best-practices">
+    Monitoring, key management, upgrades, and ledger maintenance.
+  </Card>
+</CardGroup>

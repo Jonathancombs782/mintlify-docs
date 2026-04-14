@@ -1,0 +1,133 @@
+---
+title: "Solana JSON RPC API Overview"
+description: "Learn how to interact with Solana nodes using the JSON-RPC 2.0 protocol, including public cluster endpoints, commitment levels, and best practices."
+---
+
+The Solana JSON RPC API lets you communicate directly with Solana validator nodes using the JSON-RPC 2.0 protocol over HTTP or WebSocket. Every request follows the same envelope format—a JSON object with a `jsonrpc` version string, a numeric `id`, a `method` name, and an optional `params` array. This page covers the essentials you need before calling your first method.
+
+## Protocol format
+
+All requests use JSON-RPC 2.0. A minimal request looks like this:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "getSlot",
+  "params": []
+}
+```
+
+A successful response always echoes the same `id` and wraps the result in a `result` field. Methods that return chain-state data wrap their result in a context object that includes the slot at which the value was read:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "context": { "slot": 278066127, "apiVersion": "1.18.0" },
+    "value": 1000000000
+  }
+}
+```
+
+Error responses use an `error` field instead of `result`:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "error": {
+    "code": -32602,
+    "message": "Invalid param: WrongSize"
+  }
+}
+```
+
+## Public cluster endpoints
+
+Solana Labs operates three public clusters. Use the one that matches your development stage.
+
+| Cluster | HTTP endpoint | Purpose |
+|---|---|---|
+| Devnet | `https://api.devnet.solana.com` | Development and testing. Tokens have no real value. Free airdrop faucet available. |
+| Testnet | `https://api.testnet.solana.com` | Stress-testing release candidates. Tokens have no real value. |
+| Mainnet Beta | `https://api.mainnet-beta.solana.com` | Production. SOL tokens are real. |
+
+<Warning>
+Public endpoints are rate-limited and not suitable for high-throughput production applications. Use a dedicated RPC provider or run your own validator for production workloads.
+</Warning>
+
+## Making your first request
+
+Send a POST request with `Content-Type: application/json` to any cluster endpoint:
+
+```bash
+curl https://api.devnet.solana.com \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "getBalance",
+    "params": ["83astBRguLMdt2h5U1Tpdq5tjFoJ6noeGwaY3mDLVcri"]
+  }'
+```
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "context": { "slot": 278066127 },
+    "value": 500000000
+  }
+}
+```
+
+## Commitment levels
+
+Many methods accept a `commitment` configuration parameter that controls how finalized the data must be before the node returns it. There are three levels, from least to most confirmed:
+
+| Level | Description |
+|---|---|
+| `processed` | The node has received and processed the block, but it has not yet been voted on. Provides the lowest latency but the highest chance of seeing a rollback. |
+| `confirmed` | A supermajority of the cluster has voted on the block. Rollbacks are very unlikely. |
+| `finalized` | The block has been finalized — it can never be rolled back. Use this for any operation that depends on irreversibility. |
+
+Pass the commitment level in the configuration object for any method that supports it:
+
+```bash
+curl https://api.devnet.solana.com \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "getBalance",
+    "params": [
+      "83astBRguLMdt2h5U1Tpdq5tjFoJ6noeGwaY3mDLVcri",
+      { "commitment": "finalized" }
+    ]
+  }'
+```
+
+<Tip>
+Default commitment is `finalized` for most methods unless you specify otherwise. Use `confirmed` when you need lower latency and can tolerate a very small rollback risk.
+</Tip>
+
+## Rate limits and best practices
+
+The public endpoints enforce rate limits to protect cluster stability. Exceeding these limits returns HTTP 429 responses.
+
+To stay within limits and build reliable integrations:
+
+- **Cache responses** when the data does not change often (for example, `getGenesisHash` or `getEpochSchedule`).
+- **Use `minContextSlot`** when you need to read data that was written in a recent transaction. This prevents the node from returning stale data from a slot before your write landed.
+- **Batch independent reads** into a single connection if your RPC provider supports batch JSON-RPC.
+- **Use WebSocket subscriptions** instead of polling loops for account or program changes. See [WebSocket Subscriptions](/rpc/websocket-subscriptions) for details.
+- **Target Devnet or Testnet** during development to avoid hitting Mainnet Beta limits unnecessarily.
+
+<Note>
+For production applications, consider a dedicated RPC provider (such as Alchemy, Helius, or QuickNode) or a self-hosted validator with the `--full-api` flag enabled.
+</Note>

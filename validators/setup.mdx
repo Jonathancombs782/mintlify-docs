@@ -1,0 +1,391 @@
+---
+title: "Set Up Your First Solana Validator Node"
+description: "Step-by-step guide to installing the Solana CLI, creating keypairs, configuring solana-validator, and verifying your node is voting on testnet."
+---
+
+This guide walks you through setting up a validator on the Solana **testnet** cluster for the first time. Testnet is stress-tested daily and is the recommended environment to practice before moving to mainnet-beta. The same steps apply to other clusters with minor flag changes.
+
+<Info>
+  You will work on two machines: your **trusted local computer** (for key generation) and your **remote validator server** (where `solana-validator` runs). Commands are labeled clearly throughout.
+</Info>
+
+<Steps>
+
+<Step title="Install the Solana CLI on your local computer">
+
+Open a terminal on your trusted local machine and install the Solana CLI using the official install tool:
+
+```bash
+sh -c "$(curl -sSfL https://release.solana.com/stable/install)"
+```
+
+Alternatively, you can [build from source](/cli/installation#build-from-source) for a binary optimized for your exact hardware.
+
+Verify the installation:
+
+```bash
+solana --version
+```
+
+You should see output similar to:
+
+```
+solana-cli 1.14.17 (src:b29a37cf; feat:3488713414)
+```
+
+Point the CLI at testnet:
+
+```bash
+solana config set --url https://api.testnet.solana.com
+```
+
+Confirm the change:
+
+```bash
+solana config get
+```
+
+The output should include `RPC URL: https://api.testnet.solana.com`.
+
+</Step>
+
+<Step title="Generate keypairs">
+
+**Run these commands on your trusted local computer, not on the validator server.**
+
+You need three keypairs:
+
+```bash
+solana-keygen new -o validator-keypair.json
+```
+
+```bash
+solana-keygen new -o vote-account-keypair.json
+```
+
+```bash
+solana-keygen new -o authorized-withdrawer-keypair.json
+```
+
+<Warning>
+  The `authorized-withdrawer-keypair.json` grants full control over your vote account. Never store it on the validator server. Back it up to a hardware wallet, paper wallet, or multisig before proceeding, and then delete the local file.
+</Warning>
+
+Set the CLI to use your validator identity by default:
+
+```bash
+solana config set --keypair ./validator-keypair.json
+```
+
+</Step>
+
+<Step title="Fund the identity account and create a vote account">
+
+Check your current balance (it will be 0):
+
+```bash
+solana balance
+```
+
+On testnet you can airdrop SOL:
+
+```bash
+solana airdrop 1
+```
+
+<Note>
+  `solana airdrop` only works on testnet and devnet. For mainnet-beta you must acquire SOL and transfer it to the identity account yourself.
+</Note>
+
+Create the vote account on-chain. **Run this on your trusted local computer:**
+
+```bash
+solana create-vote-account -ut \
+    --fee-payer ./validator-keypair.json \
+    ./vote-account-keypair.json \
+    ./validator-keypair.json \
+    ./authorized-withdrawer-keypair.json
+```
+
+The `-ut` flag targets testnet. `--fee-payer` specifies which keypair pays the transaction fee.
+
+After the transaction confirms, move your `authorized-withdrawer-keypair.json` to secure offline storage and remove it from your local machine.
+
+</Step>
+
+<Step title="Prepare the remote validator server">
+
+SSH into your validator server:
+
+```bash
+ssh user@<server.hostname>
+```
+
+Update system packages:
+
+```bash
+sudo apt update && sudo apt upgrade
+```
+
+Create a dedicated non-root user named `sol`:
+
+```bash
+sudo adduser sol
+```
+
+Running `solana-validator` as `sol` rather than `root` limits the blast radius of any security issue.
+
+</Step>
+
+<Step title="Format and mount disks">
+
+Confirm available disk space:
+
+```bash
+df -h
+```
+
+List block devices to identify unformatted drives:
+
+```bash
+lsblk -f
+```
+
+Any device without a UUID is unformatted.
+
+**Ledger disk** (example device `/dev/nvme0n1`):
+
+```bash
+sudo mkfs -t ext4 /dev/nvme0n1
+sudo mkdir -p /mnt/ledger
+sudo chown -R sol:sol /mnt/ledger
+sudo mount /dev/nvme0n1 /mnt/ledger
+```
+
+**Accounts disk** (example device `/dev/nvme1n1`):
+
+```bash
+sudo mkfs -t ext4 /dev/nvme1n1
+sudo mkdir -p /mnt/accounts
+sudo chown -R sol:sol /mnt/accounts
+sudo mount /dev/nvme1n1 /mnt/accounts
+```
+
+</Step>
+
+<Step title="Tune system parameters">
+
+Your system will not start properly without these kernel settings.
+
+Apply sysctl tuning:
+
+```bash
+sudo bash -c "cat >/etc/sysctl.d/21-solana-validator.conf <<EOF
+# Increase UDP buffer sizes
+net.core.rmem_default = 134217728
+net.core.rmem_max = 134217728
+net.core.wmem_default = 134217728
+net.core.wmem_max = 134217728
+
+# Increase memory mapped files limit
+vm.max_map_count = 1000000
+
+# Increase number of allowed open file descriptors
+fs.nr_open = 1000000
+EOF"
+```
+
+```bash
+sudo sysctl -p /etc/sysctl.d/21-solana-validator.conf
+```
+
+Raise the file descriptor limit for the systemd service by adding `LimitNOFILE=1000000` to the `[Service]` section of your unit file, or `DefaultLimitNOFILE=1000000` to the `[Manager]` section of `/etc/systemd/system.conf`:
+
+```bash
+sudo systemctl daemon-reload
+```
+
+```bash
+sudo bash -c "cat >/etc/security/limits.d/90-solana-nofiles.conf <<EOF
+# Increase process file descriptor count limit
+* - nofile 1000000
+EOF"
+```
+
+Log out and back in to apply the limits to your session.
+
+</Step>
+
+<Step title="Install the Solana CLI on the validator server">
+
+Switch to the `sol` user:
+
+```bash
+su - sol
+```
+
+Install the CLI (building from source is preferred for production):
+
+```bash
+sh -c "$(curl -sSfL https://release.solana.com/stable/install)"
+```
+
+</Step>
+
+<Step title="Copy keypairs to the server">
+
+From your **local computer**, securely copy the validator identity and vote account keypair to the server. Do **not** copy the authorized withdrawer keypair.
+
+```bash
+scp validator-keypair.json sol@<server.hostname>:
+scp vote-account-keypair.json sol@<server.hostname>:
+```
+
+</Step>
+
+<Step title="Create the validator startup script">
+
+On the validator server, as the `sol` user, create the startup script:
+
+```bash
+mkdir -p /home/sol/bin
+touch /home/sol/bin/validator.sh
+chmod +x /home/sol/bin/validator.sh
+```
+
+Open the file and paste the following content:
+
+```bash
+exec solana-validator \
+    --identity validator-keypair.json \
+    --vote-account vote-account-keypair.json \
+    --known-validator 5D1fNXzvv5NjV1ysLjirC4WY92RNsVH18vjmcszZd8on \
+    --known-validator 7XSY3MrYnK8vq693Rju17bbPkCN3Z7KvvfvJx4kdrsSY \
+    --known-validator Ft5fbkqNa76vnsjYNwjDZUXoTWpP7VYm3mtsaQckQADN \
+    --known-validator 9QxCLckBiJc783jnMvXZubK4wH86Eqqvashtrwvcsgkv \
+    --only-known-rpc \
+    --log /home/sol/solana-validator.log \
+    --ledger /mnt/ledger \
+    --rpc-port 8899 \
+    --dynamic-port-range 8000-8020 \
+    --entrypoint entrypoint.testnet.solana.com:8001 \
+    --entrypoint entrypoint2.testnet.solana.com:8001 \
+    --entrypoint entrypoint3.testnet.solana.com:8001 \
+    --expected-genesis-hash 4uhcVJyU9pJkvQyS88uRDiswHXSCkY3zQawwpjk2NsNY \
+    --wal-recovery-mode skip_any_corrupted_record \
+    --limit-ledger-size
+```
+
+Run `solana-validator --help` to understand each flag in detail.
+
+</Step>
+
+<Step title="Verify the validator is working">
+
+Run the script to confirm it starts without errors:
+
+```bash
+/home/sol/bin/validator.sh
+```
+
+In a second terminal, verify the process is running:
+
+```bash
+ps aux | grep solana-validator
+```
+
+Tail the logs to check for `ERROR` lines:
+
+```bash
+tail -f /home/sol/solana-validator.log
+```
+
+**Check gossip registration.** Get your validator's public key:
+
+```bash
+solana-keygen pubkey ~/validator-keypair.json
+```
+
+Then confirm the validator appears in the gossip network:
+
+```bash
+solana gossip | grep <pubkey>
+```
+
+You should see a line like:
+
+```
+139.178.68.207  | 5D1fNXzvv5NjV1ysLjirC4WY92RNsVH18vjmcszZd8on | 8001   | 8004  | 139.178.68.207:80     | 1.14.17 | 3488713414
+```
+
+**Check the validators list:**
+
+```bash
+solana validators | grep <pubkey>
+```
+
+**Check catchup progress:**
+
+```bash
+solana catchup <pubkey>
+```
+
+This shows how far behind the network your validator is and how quickly it is catching up.
+
+</Step>
+
+<Step title="Configure a systemd service">
+
+Once the validator starts cleanly, stop it with `CTRL+C` and configure it as a systemd service so it restarts automatically.
+
+Create `/etc/systemd/system/sol.service`:
+
+```ini
+[Unit]
+Description=Solana Validator
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=1
+User=sol
+LimitNOFILE=1000000
+LogRateLimitIntervalSec=0
+Environment="PATH=/bin:/usr/bin:/home/sol/.local/share/solana/install/active_release/bin"
+ExecStart=/home/sol/bin/validator.sh
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable and start the service:
+
+```bash
+sudo systemctl enable --now sol
+```
+
+Verify the validator is running with the service:
+
+```bash
+tail -f /home/sol/solana-validator*.log
+```
+
+</Step>
+
+</Steps>
+
+## Common issues
+
+<AccordionGroup>
+  <Accordion title="Out of disk space">
+    Make sure your ledger drive has at least 2 TB of free space. Use `df -h` to check. If the drive fills up, the validator will crash.
+  </Accordion>
+  <Accordion title="Validator not catching up">
+    This usually indicates a networking problem, insufficient hardware, or an outdated snapshot. Check your logs, verify port 8000–8020 is open, and confirm you are using a `--known-validator` that is online. You may need to download a fresh snapshot by removing `--no-snapshot-fetch` from your startup script.
+  </Accordion>
+  <Accordion title="Not appearing in gossip">
+    Check that `--entrypoint` addresses are reachable and that UDP ports 8000–8020 are not blocked by your firewall or ISP. Review the validator logs for connection errors.
+  </Accordion>
+</AccordionGroup>

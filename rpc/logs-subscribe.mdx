@@ -1,0 +1,204 @@
+---
+title: "logsSubscribe WebSocket Method"
+description: "Subscribe to real-time transaction log notifications filtered by all transactions, all with votes, or transactions mentioning a specific public key."
+---
+
+The `logsSubscribe` method pushes a notification every time a transaction matching your filter is processed. Each notification includes the transaction signature, any error that occurred, and the full array of log messages emitted during execution. This subscription is particularly useful for monitoring program activity, debugging on-chain errors in real time, and reacting to events emitted by your programs.
+
+## Connecting
+
+Connect to the WebSocket endpoint before sending a subscribe request:
+
+```javascript
+const ws = new WebSocket("wss://api.devnet.solana.com");
+```
+
+See [WebSocket Subscriptions Overview](/rpc/websocket-subscriptions) for connection details.
+
+## logsSubscribe
+
+### Parameters
+
+<ParamField path="params[0]" type="string | object" required>
+  Filter that determines which transactions trigger a notification. Accepted values:
+
+  - `"all"` — notify for every non-vote transaction.
+  - `"allWithVotes"` — notify for every transaction including vote transactions.
+  - `{ "mentions": ["<pubkey>"] }` — notify only for transactions that reference the given base-58 public key in any account, program, or instruction. Only one public key is supported per subscription.
+</ParamField>
+
+<ParamField path="params[1]" type="object">
+  Optional configuration object.
+
+  <Expandable title="config fields">
+    <ParamField path="commitment" type="string" default="finalized">
+      Commitment level at which to trigger notifications. One of `processed`, `confirmed`, or `finalized`.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Subscribe request — all transactions
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "logsSubscribe",
+  "params": [
+    "all",
+    { "commitment": "confirmed" }
+  ]
+}
+```
+
+### Subscribe request — mentions filter
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "logsSubscribe",
+  "params": [
+    {
+      "mentions": ["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"]
+    },
+    { "commitment": "confirmed" }
+  ]
+}
+```
+
+### Subscribe response
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": 24040
+}
+```
+
+Store the returned `subscriptionId` (`24040`) to unsubscribe later.
+
+## Notification format
+
+<ResponseField name="method" type="string">
+  Always `"logsNotification"`.
+</ResponseField>
+
+<ResponseField name="params.subscription" type="number">
+  The subscription ID.
+</ResponseField>
+
+<ResponseField name="params.result" type="object">
+  <Expandable title="result fields">
+    <ResponseField name="context.slot" type="number">
+      The slot at which the transaction was processed.
+    </ResponseField>
+    <ResponseField name="value.signature" type="string">
+      Base-58 encoded transaction signature (transaction ID).
+    </ResponseField>
+    <ResponseField name="value.err" type="object | null">
+      Error if the transaction failed, or `null` if it succeeded.
+    </ResponseField>
+    <ResponseField name="value.logs" type="string[]">
+      Array of log messages emitted during transaction execution.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Notification example
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "logsNotification",
+  "params": {
+    "subscription": 24040,
+    "result": {
+      "context": { "slot": 278066300 },
+      "value": {
+        "signature": "5h6xBEauJ3PK6SWCZ1PGjBvj8vDdWG3KpwATGy1ARAXFSDwt8GFXM7W5ZlM7nAqToBnBCZhbFXgOxFnVsBT",
+        "err": null,
+        "logs": [
+          "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [1]",
+          "Program log: Instruction: Transfer",
+          "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 4736 of 200000 compute units",
+          "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success"
+        ]
+      }
+    }
+  }
+}
+```
+
+## logsUnsubscribe
+
+### Unsubscribe request
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "logsUnsubscribe",
+  "params": [24040]
+}
+```
+
+### Unsubscribe response
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": true
+}
+```
+
+## Full JavaScript example
+
+```javascript
+const ws = new WebSocket("wss://api.devnet.solana.com");
+let subscriptionId = null;
+
+const MY_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+
+ws.addEventListener("open", () => {
+  ws.send(JSON.stringify({
+    jsonrpc: "2.0",
+    id: 1,
+    method: "logsSubscribe",
+    params: [
+      { mentions: [MY_PROGRAM_ID] },
+      { commitment: "confirmed" },
+    ],
+  }));
+});
+
+ws.addEventListener("message", (event) => {
+  const message = JSON.parse(event.data);
+
+  if (message.id === 1 && message.result !== undefined) {
+    subscriptionId = message.result;
+    console.log("Subscribed, ID:", subscriptionId);
+    return;
+  }
+
+  if (message.method === "logsNotification") {
+    const { signature, err, logs } = message.params.result.value;
+    if (err) {
+      console.error("Transaction failed:", signature, err);
+    } else {
+      console.log("Transaction succeeded:", signature);
+      console.log("Logs:", logs);
+    }
+  }
+});
+```
+
+<Warning>
+Using `"all"` or `"allWithVotes"` on Mainnet Beta generates an extremely high volume of notifications. Prefer a `mentions` filter scoped to the specific program or address you care about.
+</Warning>
+
+<Tip>
+To react to a specific on-chain event (such as a custom program emitting a structured log), search the `logs` array for a prefix like `"Program log: "` and parse the remainder as your event data.
+</Tip>
