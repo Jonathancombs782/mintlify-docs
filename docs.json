@@ -3,10 +3,10 @@
   "theme": "aspen",
   "name": "Solana Labs",
   "logo": {
-    "light": "https://media.brand.dev/352b6de9-8208-4d27-b912-1cf299aa2d51.svg",
-    "dark": "https://media.brand.dev/352b6de9-8208-4d27-b912-1cf299aa2d51.svg"
+    "light": "assets/logo.svg",
+    "dark": "assets/logo.svg"
   },
-  "favicon": "https://media.brand.dev/6dc496f4-3d20-4708-adaf-46915cbce87c.png",
+  "favicon": "assets/favicon.png",
   "colors": {
     "primary": "#d04290",
     "light": "#6c1588",

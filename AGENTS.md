@@ -14,12 +14,15 @@
 
 ## Terminology
 
-{/* Add product-specific terms and preferred usage */}
-{/* Example: Use "workspace" not "project", "member" not "user" */}
+- "Program" for on-chain programs (not "smart contract" as the primary term)
+- "Account" for Solana accounts; "wallet" only for keypair/wallet tooling
+- "Cluster" for Devnet / Testnet / Mainnet Beta; "network" only in general prose
+- "Validator" for validator operators; "RPC node" for API-serving nodes
+- Use "SOL" for the token and "lamport" for the smallest unit
 
 ## Style preferences
 
-{/* Add any project-specific style rules below */}
+Follow the existing pages: short imperative steps, Solana CLI commands in code blocks with sample output, and version numbers only when verified against a current release.
 
 - Use active voice and second person ("you")
 - Keep sentences concise — one idea per sentence
@@ -29,5 +32,6 @@
 
 ## Content boundaries
 
-{/* Define what should and shouldn't be documented */}
-{/* Example: Don't document internal admin features */}
+- Document only what is in this repo's Solana docs snapshot (CLI, clusters, concepts, RPC, validators, Geyser plugins).
+- Do not add new product docs for other projects here; this repo is a Solana documentation copy.
+- Do not invent API endpoints or CLI versions — verify against the Solana CLI / RPC reference first.
